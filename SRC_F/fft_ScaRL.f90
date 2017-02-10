@@ -12,63 +12,57 @@ contains
 !-------------------------------------------------------------
 
 
-subroutine gen_std_gauss_FFT(data_real_3D, Np)
+subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
 
     implicit none
     !INPUT
-    integer, dimension(3) :: Np
+    integer, dimension(3), intent(in) :: Np
+    double precision, dimension(3), intent(in) :: xRange
+    integer :: corrMod=1
     !INPUT OUTPUT
     double precision, dimension(:,:,:), intent(inout) :: data_real_3D
     !LOCAL
-    integer(C_INTPTR_T) :: L, M, N
-    integer(C_INTPTR_T) :: local_LastDim
-    integer(C_INTPTR_T) :: local_LD_offset
-    type(C_PTR) :: cdata, plan
-    integer(C_INTPTR_T) :: alloc_local
-    integer :: sliceSize
-    integer :: kNLocal
-
-    double precision, dimension(Np(1),Np(2),Np(3)) :: phiK, gammaK, k_mtx
-    integer(kind=8) :: i_long, kNCumulated_Init, kNCumulated_End
-    double precision :: trashNumber
+    integer(kind=8) :: L, M, N
+    integer(kind=8) :: plan
+    double precision, dimension(Np(1),Np(2),Np(3)) :: phiK, gammaK, Sk_mtx
     double precision :: ampMult
-
+    double precision :: k_max = 7.355d0
+    double precision, dimension(3) :: delta_k
+    integer :: ii, jj, kk
+    double precision, parameter :: PI = 3.1415926535898d0;
+    integer, parameter :: cm_GAUSSIAN = 1
 
     L = Np(1)
     M = Np(2)
     N = Np(3)
 
-    call fftw_mpi_init()
+    !Build Sk matrix
+    delta_k(:) = k_max/Np(:)
+    select case(corrMod)
 
-    !alloc_local = fftw_mpi_local_size_3d(N, M, L, RDF%comm, &
-    !                                     local_LastDim, local_LD_offset) !FOR MPI
-    !cdata = fftw_alloc_real(alloc_local)
-    !call c_f_pointer(cdata, data_real_3D, [L, M, local_LastDim])
+    case(cm_GAUSSIAN)
+    do ii = 1, Np(1)
+        do jj = 1, Np(2)
+            do kk = 1, Np(3)
+                Sk_mtx(ii,jj,kk) = product(corrL) &
+                       *exp(-sum((dble([ii,jj,kk]-1)*delta_k(:))**2.0D0 &
+                       *(corrL(:)**2.0D0)/(4.0d0*PI)))
+            end do
+        end do
+    end do
 
-    !Build k matrix
-    k_mtx = 1.0d0
+    end select
+    
     call random_number(gammaK(:,:,:))
     call random_number(phiK(:,:,:))
     gammaK  = gammaK -0.5
-
-    k_mtx   =  gammak*k_mtx*cos(2.0D0*PI*phik);
-
-    !cdata = fftw_alloc_real(alloc_local)
-    !call c_f_pointer(cdata, data_real_2D, [L,local_M])
-
-    !ampMult = 2.0d0*sqrt(product(MSH%xStep)/((2.0d0)**(3d0)))
-
-    plan = fftw_plan_r2r_3d(N, M, L, k_mtx, &
-                            FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE)
-   ! plan = fftw_mpi_plan_r2r(RDF%nDim, [N, M, L], data_real_3D, data_real_3D, &
-   !                          RDF%comm, [FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01], FFTW_ESTIMATE)
-    call fftw_mpi_execute_r2r(plan, k_mtx, data_real_3D)
-
+    Sk_mtx  = gammak*sqrt(Sk_mtx)*cos(2.0D0*PI*phik);
+    
+    call fftw_mpi_init()
+    plan = fftw_plan_r2r_3d(L,M,N, Sk_mtx, data_real_3d, &
+           FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE)
+    call fftw_mpi_execute_r2r(plan, Sk_mtx, data_real_3D)
     call fftw_destroy_plan(plan)
-    call fftw_free(cdata)
-
-    if(allocated(gammaK)) deallocate(gammaK)
-    if(allocated(phik)) deallocate(phik)
 
 end subroutine gen_Std_Gauss_FFT
 
