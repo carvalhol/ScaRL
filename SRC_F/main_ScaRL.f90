@@ -12,7 +12,7 @@ program main_ScaRL
     integer, dimension(3) :: Np=[5,10,15]
     integer :: comm_group
     integer, dimension(3) :: L=[20,30,40]
-    integer, dimension(3) :: Np_ovlp = [2,3,4], topo_shape, topo_pos
+    integer, dimension(3) :: Np_ovlp = [3,4,5], topo_shape, topo_pos
     !INPUT VARIABLES
 
     !Initializing MPI
@@ -102,6 +102,7 @@ program main_ScaRL
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
             logical :: oneFile=.true.
+            integer :: partition_type = 1
             
              
             res_folder = "."
@@ -114,11 +115,16 @@ program main_ScaRL
             !k_mtx(:,:,:) = dble(rank)
             k_mtx(:,:,:) = 1d0
 
+            call apply_UnityPartition_mtx(Np, Np_ovlp,&
+                                          partition_type, &
+                                          topo_pos, topo_shape, &
+                                          k_mtx)
             call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
 
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
+            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx) 
             
 
             if(oneFile) then 
@@ -487,4 +493,93 @@ program main_ScaRL
 
     end subroutine add_overlap
 
+    !---------------------------------------------------------------
+    !---------------------------------------------------------------
+    !---------------------------------------------------------------
+    !---------------------------------------------------------------
+    subroutine apply_UnityPartition_mtx(Np, Np_ovlp,&
+                                        partitionType, &
+                                        topo_pos, topo_shape, &
+                                        randField_3D)
+    
+        implicit none
+    
+        !INPUT
+        integer, dimension(3), intent(in) ::  Np, Np_ovlp
+        integer, intent(in) :: partitionType
+        integer, dimension(3) :: topo_pos, topo_shape
+        double precision, dimension(:,:,:) :: randField_3D
+        !LOCAL
+        integer :: ii, jj, kk
+        double precision, dimension(:), allocatable :: pattern
+        integer, dimension(3) :: U_Lim, D_Lim
+        logical :: considerNeighbour
+        double precision, dimension(Np(1), Np(2), Np(3)) :: unityPartition
+        double precision, parameter :: PI = 3.1415926535898d0;
+        integer :: shift
+
+        unityPartition = 1.0D0
+    
+        !print*, "apply_UnityPartition_mtx = ", pattern
+        !print*, "topo_pos = ", topo_pos
+        !print*, "topo_shape = ", topo_shape
+        
+        do jj = 1, 2
+    
+            if(jj == 1) then
+                D_Lim = 1
+                U_Lim = Np_ovlp
+                shift = -1
+            else
+                D_Lim = Np - Np_ovlp + 1
+                U_Lim = Np
+                shift = 1
+            end if
+    
+            do ii = 1, 3
+    
+                if(topo_pos(ii) + shift < 0 &
+                   .or. topo_pos(ii) + shift > (topo_shape(ii) - 1)) cycle 
+    
+                if(allocated(pattern)) deallocate(pattern)
+                allocate(pattern(Np_ovlp(ii)))
+                pattern = 1d0
+                if(Np_ovlp(ii) > 1) then
+                   pattern = [(dble(kk), kk=0, Np_ovlp(ii)-1)]/dble((Np_ovlp(ii)-1))
+                   if(jj == 1) pattern = pattern(size(pattern):1:-1) !Pattern inversion
+                   if(partitionType == 1) then
+                       pattern = ((1.0D0 + cos(PI*(pattern)))&
+                                   / 2.0D0)
+                   end if
+                end if
+                !print*, "pattern = ", pattern
+                !print*, "size(pattern) = ", size(pattern)
+                !print*, "D_Lim = ", D_Lim
+                !print*, "U_Lim = ", U_Lim
+    
+                if(ii==1) then
+                    do kk = D_Lim(ii), U_Lim(ii)
+                        unityPartition(kk,:,:) = unityPartition(kk,:,:) & 
+                                                 * pattern(kk-D_Lim(ii)+1)
+                    end do
+                else if(ii==2) then
+                    do kk = D_Lim(ii), U_Lim(ii)
+                        unityPartition(:,kk,:) = unityPartition(:,kk,:) &
+                                                 * pattern(kk-D_Lim(ii)+1)
+                    end do
+                else if(ii==3) then
+                    do kk = D_Lim(ii), U_Lim(ii)
+                        unityPartition(:,:,kk) = unityPartition(:,:,kk) &
+                                                 * pattern(kk-D_Lim(ii)+1)
+                    end do
+                end if
+    
+            end do
+        end do
+    
+        randField_3D = randField_3D * sqrt(unityPartition)
+    
+        if(allocated(pattern)) deallocate(pattern)
+    
+    end subroutine apply_UnityPartition_Mtx
 end program main_ScaRL
