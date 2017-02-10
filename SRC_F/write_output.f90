@@ -220,7 +220,7 @@ contains
 
 
         !LOCAL VARIABLES
-        integer :: DIRECT_OUT = 0
+        logical :: DIRECT_OUT = .true.
         integer             :: i, file
         character (len=110) :: dimText;
         double precision, dimension(3) :: xStep
@@ -320,7 +320,7 @@ contains
         !LOCAL
         character(len=1024) :: XMF_folder="."
         character(len=1024) :: H5_TO_XMF_path=".", ds_name
-        integer :: DIRECT_OUT = 0
+        logical :: DIRECT_OUT = .true.
         integer             :: i, file
         character (len=110) :: dimText;
 

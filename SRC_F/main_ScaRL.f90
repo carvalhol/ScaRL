@@ -9,10 +9,10 @@ program main_ScaRL
     !INPUTS
     integer :: rank, nb_procs
     !LOCAL VARIABLES
-    integer, dimension(3) :: Np=[10,10,10]
+    integer, dimension(3) :: Np=[5,10,15]
     integer :: comm_group
-    integer, dimension(3) :: L=[20,20,20]
-    integer, dimension(3) :: Np_ovlp = [3,3,3], topo_shape, topo_pos
+    integer, dimension(3) :: L=[20,30,40]
+    integer, dimension(3) :: Np_ovlp = [2,3,4], topo_shape, topo_pos
     !INPUT VARIABLES
 
     !Initializing MPI
@@ -88,7 +88,7 @@ program main_ScaRL
             integer, dimension(3), intent(in) :: Np_ovlp
             integer, intent(in) :: rank, comm_group, nb_procs
             integer, dimension(3), intent(in) :: topo_pos, topo_shape
-            double precision, dimension(3) :: xStep = [1d0, 2d0, 3d0] 
+            double precision, dimension(3) :: xStep = [1d0, 1d0, 1d0] 
             double precision, dimension(3) :: xMinGlob = [-1d0,-2d0,-3d0]
              
             !OUTPUT
@@ -111,11 +111,14 @@ program main_ScaRL
             coord_0 = dble(origin)*xStep + xMinGlob
             coord_N = coord_0 + (dble(Np-1)*xStep)
 
-            k_mtx(:,:,:) = dble(rank)
+            !k_mtx(:,:,:) = dble(rank)
+            k_mtx(:,:,:) = 1d0
 
-            !call add_overlap(k_mtx, Np, Np_ovlp, rank, &
-            !               nb_procs, topo_pos, topo_shape, &
-            !               comm_group)
+            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
+                           nb_procs, topo_pos, topo_shape, &
+                           comm_group)
+
+            if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             
 
             if(oneFile) then 
@@ -167,6 +170,7 @@ program main_ScaRL
         integer, dimension(3), intent(in) :: topo_shape
         !OUTPUT
         integer, dimension(3), intent(out) :: topo_pos
+        !LOCAL
         integer :: rest
 
         rest = rank
@@ -189,7 +193,6 @@ program main_ScaRL
         integer, dimension(3), intent(in) :: topo_pos
         !OUTPUT
         integer, intent(out) :: rank
-        integer :: rest
 
         rank = product(topo_shape(1:2))*topo_pos(3) &
                + topo_shape(1)*topo_pos(2)          &
@@ -227,11 +230,13 @@ program main_ScaRL
 
             do while (.not. nFieldsOK)
                 nPoints = nPointsBase + (nBlocks - 1)*2*nPointsOvlp
-                ratio = ceiling(dble(nPoints)/dble(nBlocks))
+                !print*, "nPoints = ", nPoints
+                !print*, "nBlocks = ", nBlocks
                 where(nPoints/nBlocks > pointsPerBlockMax) & 
                                                    nBlocks = nBlocks + 1
                 ratio = ceiling(dble(nPoints)/dble(nBlocks))
                 if(all(ratio < pointsPerBlockMax)) nFieldsOK = .true.
+                if(product(nBlocks) > nb_procs) nFieldsOK = .true. 
             end do
 
             nBlocksIdeal = nBlocks
@@ -314,17 +319,16 @@ program main_ScaRL
         double precision, dimension(:,:,:), intent(inout) :: RF
 
         !LOCAL
-        double precision, dimension(Np(1), Np(2), Np(3)) :: RF_temp
+        double precision, dimension(Np(1), Np(2), Np(3)) :: RF_temp1, RF_temp2
         integer, dimension(27) :: neigh_rank, op_neigh_rank
         integer, dimension(3,27) :: neigh_shift
         integer, dimension(-1:1,-1:1,-1:1) :: dir_index
         integer, dimension(3) :: topo_pos_temp
         !LOCAL
-        integer :: dir
+        integer :: dir, op_dir
         integer, dimension(3) :: minP, maxP
         integer :: neighRank
         integer, dimension(3) :: dirShift
-        integer :: op_direction
         integer(kind=8) :: nOvlpMax
         integer :: code
         integer :: double_size
@@ -336,6 +340,7 @@ program main_ScaRL
         logical :: snd, rcv
         integer :: BufDT_size
         integer :: ii, jj, kk, cnt
+        integer :: rang_test=0
 
         !Defining neighbours
         cnt = 0
@@ -365,6 +370,16 @@ program main_ScaRL
                                            topo_pos_temp, &
                                            op_neigh_rank(cnt)) 
                     end if
+                    
+                   ! if(neigh_rank(cnt) /= rank .or. op_neigh_rank(cnt) /= rank)then 
+                   ! if(rang_test == rank) print*, "rk ", rank, "neigh shift", neigh_shift(:,cnt), "---------------"
+                   ! if(rang_test == rank .and. neigh_rank(cnt) /= rank) &
+                   !       print*, "neigh = ", neigh_rank(cnt)
+                   ! if(rang_test == rank .and. op_neigh_rank(cnt) /= rank) &
+                   !       print*, "op_ng = ", op_neigh_rank(cnt) 
+                   ! if(rang_test == rank) print*, "  " 
+                   ! end if
+
                 end do
             end do
         end do
@@ -387,6 +402,9 @@ program main_ScaRL
         bufferSize = overEst*(nOvlpMax+overHead)
         allocate(buffer(bufferSize))
         call MPI_BUFFER_ATTACH(buffer, int(double_size*bufferSize),code)
+
+        !Communications
+        RF_temp1 = 0
 
         do dir = 1, size(neigh_rank)
 
@@ -422,33 +440,45 @@ program main_ScaRL
             !RECEIVING---------------------------------------------------------------
             
             rcv = .true.
-            dirShift   = -dirShift
+            !dirShift   = -dirShift
             neighRank  = op_neigh_rank(dir)
+            op_dir = dir_index(-dirShift(1), -dirShift(2), -dirShift(3))
             minP(:) = 1
             maxP(:) = Np
-            where(neigh_shift(:,dir) == 1 ) minP = Np - Np_ovlp + 1
-            where(neigh_shift(:,dir) == -1) maxP = Np_ovlp
+            where(neigh_shift(:,op_dir) == 1 ) minP = Np - Np_ovlp + 1
+            where(neigh_shift(:,op_dir) == -1) maxP = Np_ovlp
             totalSize = (product(maxP - minP + 1))
 
-            if(op_neigh_rank(dir) == rank) rcv = .false. !Check if this direction exists
+            if(neigh_rank(op_dir) == rank) rcv = .false. !Check if this direction exists
 
             if(rcv) then
-                !call wLog(" RECEIVING ==============")
+                !if(rank == rang_test) print*, " RECEIVING =============="
 
                 tag  = rank
-                RF_temp = 0.0D0
+                RF_temp2 = 0.0D0
 
-                call MPI_RECV (RF_temp(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3)), &
+                call MPI_RECV (RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3)), &
                     int(totalSize), MPI_DOUBLE_PRECISION, &
                     neighRank, tag, comm_group, statut, code)
                     
-                RF(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3)) = &
-                    RF(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))   &
-                    + RF_temp(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
+                RF_temp1(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3)) = &
+                    RF_temp1(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))   &
+                    + RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
+                
+               ! if(rank == rang_test) print*, "  RECVER: rank ", rank
+               ! if(rank == rang_test) print*, "  FROM rank ", neighRank
+               ! if(rank == rang_test) print*, "  minP = ", minP
+               ! if(rank == rang_test) print*, "  maxP = ", maxP
+               ! if(rank == rang_test) print*, "  op_dir_shft = ", -dirShift
+               ! if(rank == rang_test) print*, "  totalSize = ", totalSize
+               ! if(rank == rang_test) print*, "  tag = ", tag
+               ! if(rank == rang_test) print*, "  CONTENT = ", RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
             else
             
             end if
         end do
+
+        RF = RF + RF_temp1
 
         BufDT_size = int(double_size*bufferSize)
         call MPI_BUFFER_DETACH (buffer,BufDT_size,code)
