@@ -3,6 +3,7 @@ program main_ScaRL
     use mpi
     use write_output
     use str_functions
+    use fftw_ScaRL
 
     implicit none
 
@@ -91,7 +92,7 @@ program main_ScaRL
             double precision, dimension(3) :: xStep = [1d0, 1d0, 1d0] 
             double precision, dimension(3) :: xMinGlob = [-1d0,-2d0,-3d0]
              
-            !OUTPUT
+            !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
             character(len=1024) :: HDF5_name, XMF_name, res_folder
             integer, dimension(3) :: origin
@@ -103,7 +104,7 @@ program main_ScaRL
             integer, dimension(3) :: temp_topo_pos
             logical :: oneFile=.true.
             integer :: partition_type = 1
-            
+            double precision, dimension(3) :: xRange
              
             res_folder = "."
             HDF5_name = str_cat("HDF5_proc_",trim(num2str(rank,4)),".h5")
@@ -111,9 +112,12 @@ program main_ScaRL
             origin = (Np-Np_ovlp)*topo_pos            
             coord_0 = dble(origin)*xStep + xMinGlob
             coord_N = coord_0 + (dble(Np-1)*xStep)
+            xRange = coord_N - coord_0
 
             !k_mtx(:,:,:) = dble(rank)
-            k_mtx(:,:,:) = 1d0
+            !k_mtx(:,:,:) = 1d0
+
+            call gen_std_gauss_FFT(k_mtx, Np, xRange)
 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                           partition_type, &
@@ -583,3 +587,79 @@ program main_ScaRL
     
     end subroutine apply_UnityPartition_Mtx
 end program main_ScaRL
+
+
+
+!module fftw_ScaRL
+!    use, intrinsic :: iso_c_binding
+!    !include 'fftw3.f'
+!    include 'fftw3-mpi.f03'
+!    !Attention there is a line "include 'fftw3-mpi.f03'" just before this one
+!
+!contains
+!
+!!-------------------------------------------------------------
+!!-------------------------------------------------------------
+!!-------------------------------------------------------------
+!!-------------------------------------------------------------
+!
+!
+!subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
+!
+!    implicit none
+!    !INPUT
+!    integer, dimension(3), intent(in) :: Np
+!    double precision, dimension(3), intent(in) :: xRange
+!    integer :: corrMod=1
+!    double precision, dimension(3) :: corrL=[1.0,1.0,1.0]
+!    !INPUT OUTPUT
+!    double precision, dimension(:,:,:), intent(inout) :: data_real_3D
+!    !LOCAL
+!    integer :: L, M, N
+!    !integer(C_INTPTR_T) :: L, M, N
+!    !integer(kind=8) :: plan
+!    type(C_PTR) :: plan
+!    double precision, dimension(Np(1),Np(2),Np(3)) :: phiK, gammaK, Sk_mtx
+!    double precision :: ampMult
+!    double precision :: k_max = 7.355d0
+!    double precision, dimension(3) :: delta_k
+!    integer :: ii, jj, kk
+!    double precision, parameter :: PI = 3.1415926535898d0;
+!    integer, parameter :: cm_GAUSSIAN = 1
+!    !real(C_DOUBLE), pointer :: data_C_3D(:,:,:)
+!
+!    L = Np(1)
+!    M = Np(2)
+!    N = Np(3)
+!
+!    !Build Sk matrix
+!    delta_k(:) = k_max/Np(:)
+!    select case(corrMod)
+!
+!    case(cm_GAUSSIAN)
+!    do ii = 1, Np(1)
+!        do jj = 1, Np(2)
+!            do kk = 1, Np(3)
+!                Sk_mtx(ii,jj,kk) = product(corrL) &
+!                       *exp(-sum((dble([ii,jj,kk]-1)*delta_k(:))**2.0D0 &
+!                       *(corrL(:)**2.0D0)/(4.0d0*PI)))
+!            end do
+!        end do
+!    end do
+!
+!    end select
+!    
+!    call random_number(gammaK(:,:,:))
+!    call random_number(phiK(:,:,:))
+!    gammaK  = gammaK -0.5
+!    Sk_mtx  = gammak*sqrt(Sk_mtx)*cos(2.0D0*PI*phik);
+!    
+!    plan = fftw_plan_r2r_3d(N,M,L, Sk_mtx, data_real_3d, &
+!           FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE)
+!    call fftw_execute_r2r(plan, Sk_mtx, data_real_3D)
+!    call fftw_destroy_plan(plan)
+!
+!end subroutine gen_Std_Gauss_FFT
+!
+!
+!end module fftw_ScaRL

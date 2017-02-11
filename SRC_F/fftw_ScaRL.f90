@@ -19,11 +19,14 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
     integer, dimension(3), intent(in) :: Np
     double precision, dimension(3), intent(in) :: xRange
     integer :: corrMod=1
+    double precision, dimension(3) :: corrL=[1.0,1.0,1.0]
     !INPUT OUTPUT
     double precision, dimension(:,:,:), intent(inout) :: data_real_3D
     !LOCAL
-    integer(kind=8) :: L, M, N
-    integer(kind=8) :: plan
+    integer :: L, M, N
+    !integer(C_INTPTR_T) :: L, M, N
+    !integer(kind=8) :: plan
+    type(C_PTR) :: plan
     double precision, dimension(Np(1),Np(2),Np(3)) :: phiK, gammaK, Sk_mtx
     double precision :: ampMult
     double precision :: k_max = 7.355d0
@@ -31,6 +34,7 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
     integer :: ii, jj, kk
     double precision, parameter :: PI = 3.1415926535898d0;
     integer, parameter :: cm_GAUSSIAN = 1
+    !real(C_DOUBLE), pointer :: data_C_3D(:,:,:)
 
     L = Np(1)
     M = Np(2)
@@ -58,10 +62,9 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
     gammaK  = gammaK -0.5
     Sk_mtx  = gammak*sqrt(Sk_mtx)*cos(2.0D0*PI*phik);
     
-    call fftw_mpi_init()
-    plan = fftw_plan_r2r_3d(L,M,N, Sk_mtx, data_real_3d, &
+    plan = fftw_plan_r2r_3d(N,M,L, Sk_mtx, data_real_3d, &
            FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE)
-    call fftw_mpi_execute_r2r(plan, Sk_mtx, data_real_3D)
+    call fftw_execute_r2r(plan, Sk_mtx, data_real_3D)
     call fftw_destroy_plan(plan)
 
 end subroutine gen_Std_Gauss_FFT
