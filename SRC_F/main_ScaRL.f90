@@ -11,10 +11,10 @@ program main_ScaRL
     !INPUTS
     integer :: rank, nb_procs
     !LOCAL VARIABLES
-    integer, dimension(3) :: Np=[5,10,15]
+    integer, dimension(3) :: Np=[7,10,15]
     integer :: comm_group
     integer, dimension(3) :: L=[20,30,40]
-    integer, dimension(3) :: Np_ovlp = [3,4,5], topo_shape, topo_pos
+    integer, dimension(3) :: Np_ovlp = [5,5,5], topo_shape, topo_pos
     !INPUT VARIABLES
 
     !Initializing MPI
@@ -396,14 +396,14 @@ program main_ScaRL
         end do
 
         !Set Max Number of Points on Overlap (define buffer size)
-        nOvlpMax = 0
+        nOvlpMax = 1 !We put 1 for security, it could probably be 0
         do dir = 1, size(neigh_rank)
             if(neigh_rank(dir) == rank) cycle 
             minP(:) = 1
             maxP(:) = Np
             where(neigh_shift(:,dir) == 1 ) minP = Np - Np_ovlp + 1
             where(neigh_shift(:,dir) == -1) maxP = Np_ovlp
-            nOvlpMax = nOvlpMax + product(maxP - minP +1)
+            if(all(maxP > minP)) nOvlpMax = nOvlpMax + product(maxP - minP +1)
         end do
 
         !Buffer allocation
@@ -433,6 +433,7 @@ program main_ScaRL
             totalSize = (product(maxP - minP + 1))
 
             if(neigh_rank(dir) == rank) snd = .false. !Check if this direction exists
+            if(any(maxP <= minP)) snd = .false. !Degenerated cases
 
             if(snd) then
                 !call wLog(" SENDING ==============")
@@ -461,6 +462,7 @@ program main_ScaRL
             totalSize = (product(maxP - minP + 1))
 
             if(neigh_rank(op_dir) == rank) rcv = .false. !Check if this direction exists
+            if(any(maxP <= minP)) rcv = .false. !Degenerated cases
 
             if(rcv) then
                 !if(rank == rang_test) print*, " RECEIVING =============="
@@ -541,20 +543,20 @@ program main_ScaRL
             end if
     
             do ii = 1, 3
+
+                if(Np_ovlp(ii)<2) cycle
     
                 if(topo_pos(ii) + shift < 0 &
                    .or. topo_pos(ii) + shift > (topo_shape(ii) - 1)) cycle 
     
                 if(allocated(pattern)) deallocate(pattern)
                 allocate(pattern(Np_ovlp(ii)))
-                pattern = 1d0
-                if(Np_ovlp(ii) > 1) then
-                   pattern = [(dble(kk), kk=0, Np_ovlp(ii)-1)]/dble((Np_ovlp(ii)-1))
-                   if(jj == 1) pattern = pattern(size(pattern):1:-1) !Pattern inversion
-                   if(partitionType == 1) then
-                       pattern = ((1.0D0 + cos(PI*(pattern)))&
-                                   / 2.0D0)
-                   end if
+                pattern = [(dble(kk), kk=0, Np_ovlp(ii)-1)]/dble((Np_ovlp(ii)-1))
+                if(jj == 1) pattern = pattern(size(pattern):1:-1) !Pattern inversion
+                !Chosing type of partition of unity
+                if(partitionType == 1) then
+                    pattern = ((1.0D0 + cos(PI*(pattern)))&
+                                / 2.0D0)
                 end if
                 !print*, "pattern = ", pattern
                 !print*, "size(pattern) = ", size(pattern)
