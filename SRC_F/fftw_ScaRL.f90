@@ -13,14 +13,15 @@ contains
 !-------------------------------------------------------------
 
 
-subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
+subroutine gen_std_gauss_FFT(data_real_3D, Np, &
+                             xRange, corrL, corrMod)
 
     implicit none
     !INPUT
     integer, dimension(3), intent(in) :: Np
     double precision, dimension(3), intent(in) :: xRange
-    integer :: corrMod=cm_GAUSSIAN
-    double precision, dimension(3) :: corrL=[1.0,1.0,1.0]
+    integer, intent(in) :: corrMod
+    double precision, dimension(3), intent(in) :: corrL
     !INPUT OUTPUT
     double precision, dimension(:,:,:), intent(inout) :: data_real_3D
     !LOCAL
@@ -40,8 +41,8 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, xRange)
     select case(corrMod)
 
     case(cm_GAUSSIAN)
-    k_max = 7.355d0
-    delta_k(:) = k_max/Np(:)
+    !k_max = 7.355d0
+    delta_k(:) = 2*PI/(xRange+corrL)
     do ii = 1, Np(1)
         do jj = 1, Np(2)
             do kk = 1, Np(3)

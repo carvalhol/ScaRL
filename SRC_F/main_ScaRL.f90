@@ -10,11 +10,20 @@ program main_ScaRL
 
     !INPUTS
     integer :: rank, nb_procs
+    double precision, dimension (3) :: xMinGlob = [0d0, 0d0, 0d0]
+    double precision, dimension (3) :: xMaxGlob = [10d0, 10d0, 10d0]
+    double precision, dimension (3) :: corrL = [1d0, 1d0, 1d0]
+    double precision, dimension (3) :: overlap=[1d0,1d0,1d0]
+    integer, dimension(3) :: pointsPerCorrL=[5,5,5]
+    integer :: pointsPerBlockMax = 20
+    integer :: corrMod = cm_GAUSSIAN
+    
     !LOCAL VARIABLES
-    integer, dimension(3) :: Np=[7,10,15]
+    integer, dimension(3) :: Np
     integer :: comm_group
-    integer, dimension(3) :: L=[20,30,40]
-    integer, dimension(3) :: Np_ovlp = [5,5,5], topo_shape, topo_pos
+    integer, dimension(3) :: L
+    integer, dimension(3) :: Np_ovlp, topo_shape, topo_pos
+    double precision, dimension(3) :: xStep
     !INPUT VARIABLES
 
     !Initializing MPI
@@ -22,15 +31,36 @@ program main_ScaRL
 
     print *, "I'm processor number ", rank, " of ", nb_procs
 
-    !Finding place in topology
-    call decide_topo_shape(nb_procs, L, &
-                            Np_ovlp, topo_shape)
-    if(rank == 0) print *, "topo_shape =",topo_shape
+    call verify_inputs(xMinGlob, xMaxGlob, corrL, & 
+                       overlap, &
+                       pointsPerCorrL, pointsPerBlockMax)
+
+    !Defining L, Np_ovlp and xStep (Np stands for Number of points)
+    L       = 1+ceiling((xMaxGlob-xMinGlob)/corrL)*(pointsPerCorrL-1)
+    Np_ovlp = ceiling(overlap*dble(pointsPerCorrL))
+    xStep   = corrL/(dble(pointsPerCorrL-1))  
+
+    !Finding place in topology and defining the number of points per processor (Np)
+    call decide_topo_shape(nb_procs, L, Np_ovlp, &
+                           pointsPerBlockMax, & 
+                           topo_shape)
+    Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
+    
+    if(rank == 0) print *, "topo_shape =", topo_shape
+    if(rank == 0) print *, "L          =", L
+    if(rank == 0) print *, "Np         =", Np
+    if(rank == 0) print *, "Np_ovlp    =", Np_ovlp
+    if(rank == 0) print *, "xStep      =", xStep
+
     call get_topo_pos(rank, topo_shape, topo_pos)
     print *, "I'm processor number ", rank, "->topo_pos = ", topo_pos
+    
     !Creating Fields
-    call create_fields(Np(:), Np_ovlp, rank, nb_procs, &
-                       topo_pos, topo_shape, comm_group)
+    call create_fields(Np, Np_ovlp, rank, &
+                       nb_procs, topo_pos, topo_shape, &
+                       xStep, xMinGlob, &
+                       corrL, corrMod, &
+                       comm_group)
 
     !Finalizing MPI
     call end_communication()
@@ -77,12 +107,56 @@ program main_ScaRL
 
         end subroutine end_communication
 
+        !---------------------------------------------------------------------------------
+        !---------------------------------------------------------------------------------
+        !---------------------------------------------------------------------------------
+        !---------------------------------------------------------------------------------
+        subroutine verify_inputs(xMinGlob, xMaxGlob, corrL, &
+                                 overlap, & 
+                                 pointsPerCorrL, pointsPerBlockMax)
+        
+        double precision, dimension (3), intent(in) :: xMinGlob
+        double precision, dimension (3), intent(in) :: xMaxGlob
+        double precision, dimension (3), intent(in) :: corrL
+        double precision, dimension (3), intent(in) :: overlap
+        integer, dimension(3), intent(in) :: pointsPerCorrL
+        integer, intent(in) :: pointsPerBlockMax
+
+        if(any(xMinGlob >= xMaxGlob)) then
+            print*, "xMinGlob = ", xMinGlob
+            print*, "xMaxGlob = ", xMaxGlob
+            stop("ERROR: xMinGlob >= xMaxGlob")
+        end if 
+
+        if(any(corrL < 0)) then
+            print*, "corrL = ", corrL
+            stop("ERROR: corrL < 0")
+        end if 
+        
+        if(any(overlap < 0)) then
+            print*, "overlap = ", corrL
+            print*, "WARNING: overlap < 0, the mesh will be discontinuous"
+        end if 
+        
+        if(any(pointsPerCorrL < 2)) then
+            print*, "pointsPerCorrL = ", pointsPerCorrL
+            stop("ERROR: PointsPerCorrL < 2")
+        end if 
+        
+        if(pointsPerBlockMax < 2) then
+            print*, "pointsPerBlockMax = ", pointsPerBlockMax
+            stop("ERROR: pointsPerBlockMax < 2")
+        end if 
+        
+        end subroutine verify_inputs
         !---------------------------------------------
         !---------------------------------------------
         !---------------------------------------------
         !---------------------------------------------
         subroutine create_fields(Np, Np_ovlp, rank, &
                                  nb_procs, topo_pos, topo_shape, &
+                                 xStep, xMinGlob, &
+                                 corrL, corrMod, &
                                  comm_group)
             implicit none
             !INPUT
@@ -90,8 +164,10 @@ program main_ScaRL
             integer, dimension(3), intent(in) :: Np_ovlp
             integer, intent(in) :: rank, comm_group, nb_procs
             integer, dimension(3), intent(in) :: topo_pos, topo_shape
-            double precision, dimension(3) :: xStep = [1d0, 1d0, 1d0] 
-            double precision, dimension(3) :: xMinGlob = [-1d0,-2d0,-3d0]
+            double precision, dimension(3), intent(in) :: xStep
+            double precision, dimension(3), intent(in) :: xMinGlob
+            double precision, dimension(3), intent(in) :: corrL
+            integer, intent(in) :: corrMod
              
             !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
@@ -117,8 +193,10 @@ program main_ScaRL
 
             !k_mtx(:,:,:) = dble(rank)
             !k_mtx(:,:,:) = 1d0
+            if(rank == 0) print *, "xRange  = ", xRange
 
-            call gen_std_gauss_FFT(k_mtx, Np, xRange)
+            call gen_std_gauss_FFT(k_mtx, Np, &
+                                   xRange, corrL, corrMod)
 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                           partition_type, &
@@ -215,12 +293,15 @@ program main_ScaRL
         !-----------------------------------------------------------
         !-----------------------------------------------------------
         !-----------------------------------------------------------
-        subroutine decide_topo_shape(nb_procs, nPointsMtx, nPointsOvlp, topo_shape)
+        subroutine decide_topo_shape(nb_procs, L, nPointsOvlp, &
+                                     pointsPerBlockMax, & 
+                                     topo_shape)
 
             implicit none
             !INPUT
             integer, intent(in) :: nb_procs
-            integer, dimension(3), intent(in) :: nPointsMtx, nPointsOvlp
+            integer, dimension(3), intent(in) :: L, nPointsOvlp
+            integer, intent(in) :: pointsPerBlockMax
 
             !OUTPUT
             integer, dimension(3), intent(out) :: topo_shape
@@ -233,14 +314,13 @@ program main_ScaRL
             integer, dimension(100) :: factors
             integer :: i, pos, np, np_total, np_start, np_end
             double precision :: vol_surf_factor, vol_surf_factor_temp
-            integer :: pointsPerBlockMax = 10
 
-            nPointsBase = nPointsMtx
+            nPointsBase = L
             nBlocks = 1
             nFieldsOK = .false.
 
             do while (.not. nFieldsOK)
-                nPoints = nPointsBase + (nBlocks - 1)*2*nPointsOvlp
+                nPoints = nPointsBase + (nBlocks - 1)*nPointsOvlp
                 !print*, "nPoints = ", nPoints
                 !print*, "nBlocks = ", nBlocks
                 where(nPoints/nBlocks > pointsPerBlockMax) & 
