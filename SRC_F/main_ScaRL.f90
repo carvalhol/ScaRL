@@ -13,10 +13,11 @@ program main_ScaRL
     double precision, dimension (3) :: xMinGlob = [0d0, 0d0, 0d0]
     double precision, dimension (3) :: xMaxGlob = [10d0, 10d0, 10d0]
     double precision, dimension (3) :: corrL = [1d0, 1d0, 1d0]
-    double precision, dimension (3) :: overlap=[1d0,1d0,1d0]
+    double precision, dimension (3) :: overlap=[3d0,3d0,3d0]
     integer, dimension(3) :: pointsPerCorrL=[5,5,5]
     integer :: pointsPerBlockMax = 20
     integer :: corrMod = cm_GAUSSIAN
+    integer :: seedBase = 0
     
     !LOCAL VARIABLES
     integer, dimension(3) :: Np
@@ -28,8 +29,6 @@ program main_ScaRL
 
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
-
-    print *, "I'm processor number ", rank, " of ", nb_procs
 
     call verify_inputs(xMinGlob, xMaxGlob, corrL, & 
                        overlap, &
@@ -45,7 +44,13 @@ program main_ScaRL
                            pointsPerBlockMax, & 
                            topo_shape)
     Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
-    
+    if(any(Np < 2*Np_ovlp)) then
+        if(rank == 0) print *, "WARNING!! Overlap is too big for this domain"
+        if(rank == 0) print *, "                  the domain will be expanded"
+        if(rank == 0) print *, "        (Consider using fewer procs next time)"
+        where (Np < 2*Np_ovlp) Np = 2*Np_ovlp
+    end if
+
     if(rank == 0) print *, "topo_shape =", topo_shape
     if(rank == 0) print *, "L          =", L
     if(rank == 0) print *, "Np         =", Np
@@ -53,14 +58,13 @@ program main_ScaRL
     if(rank == 0) print *, "xStep      =", xStep
 
     call get_topo_pos(rank, topo_shape, topo_pos)
-    print *, "I'm processor number ", rank, "->topo_pos = ", topo_pos
     
     !Creating Fields
     call create_fields(Np, Np_ovlp, rank, &
                        nb_procs, topo_pos, topo_shape, &
                        xStep, xMinGlob, &
                        corrL, corrMod, &
-                       comm_group)
+                       seedBase, comm_group)
 
     !Finalizing MPI
     call end_communication()
@@ -157,7 +161,7 @@ program main_ScaRL
                                  nb_procs, topo_pos, topo_shape, &
                                  xStep, xMinGlob, &
                                  corrL, corrMod, &
-                                 comm_group)
+                                 seedBase, comm_group)
             implicit none
             !INPUT
             integer, dimension(3), intent(in) :: Np
@@ -168,6 +172,7 @@ program main_ScaRL
             double precision, dimension(3), intent(in) :: xMinGlob
             double precision, dimension(3), intent(in) :: corrL
             integer, intent(in) :: corrMod
+            integer, intent(in) :: seedBase
              
             !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
@@ -181,7 +186,10 @@ program main_ScaRL
             integer, dimension(3) :: temp_topo_pos
             logical :: oneFile=.true.
             integer :: partition_type = 1
+            integer :: seedStart
+            integer, dimension(:), allocatable :: seed
             double precision, dimension(3) :: xRange
+            integer :: code
              
             res_folder = "."
             HDF5_name = str_cat("HDF5_proc_",trim(num2str(rank,4)),".h5")
@@ -192,9 +200,22 @@ program main_ScaRL
             xRange = coord_N - coord_0
 
             !k_mtx(:,:,:) = dble(rank)
-            !k_mtx(:,:,:) = 1d0
-            if(rank == 0) print *, "xRange  = ", xRange
+            k_mtx(:,:,:) = 1d0
+            if(rank == 0) print *, "xRange (processor)  = ", xRange
 
+            if(seedStart >= 0) then
+                !Deterministic Seed
+                seedStart = seedStart + rank
+                call calculate_random_seed(seed, seedStart)
+            else
+                !Stochastic Seed
+                if(rank == 0) call calculate_random_seed(seed, seedStart)
+                call MPI_BCAST (seed, size(seed), MPI_INTEGER, 0, comm_group, code)
+                seed = seed + rank
+            end if
+
+            call init_random_seed(seed)
+            
             call gen_std_gauss_FFT(k_mtx, Np, &
                                    xRange, corrL, corrMod)
 
@@ -668,4 +689,63 @@ program main_ScaRL
         if(allocated(pattern)) deallocate(pattern)
     
     end subroutine apply_UnityPartition_Mtx
+
+    !--------------------------------------------------
+    !--------------------------------------------------
+    !--------------------------------------------------
+    !--------------------------------------------------
+    subroutine calculate_random_seed(seed, seedStart)
+
+        implicit none
+        !INPUT
+        integer, optional, intent(in) :: seedStart
+        !OUTPUT
+        integer, dimension(:), allocatable, intent(out) :: seed
+        !LOCAL
+        integer :: i
+        integer :: n
+        integer :: clock, tempClock
+
+        if(.not.allocated(seed)) then
+            call random_seed(size = n)
+            allocate(seed(n))
+        end if
+        call system_clock(COUNT=clock)
+        tempClock = clock
+        do while (clock == tempClock)
+            call system_clock(COUNT=clock)
+        end do
+
+        if(present(seedStart) .and. seedStart>=0) then
+            seed = 72 + seedStart*18 + 37*(/ (i - 1, i = 1, n) /)
+        else
+            seed = clock + 37*(/ (i - 1, i = 1, n) /)
+        end if
+
+    end subroutine calculate_random_seed
+    !---------------------------------------
+    !---------------------------------------
+    !---------------------------------------
+    !---------------------------------------
+    subroutine init_random_seed(seedIn, seedStart)
+        implicit none
+        !INPUT
+        integer, dimension(1:), optional, intent(in) :: seedIn
+        integer, optional, intent(in) :: seedStart
+        !LOCAL
+        integer, dimension(:), allocatable :: seed
+
+        if(present(seedIn)) then
+            call random_seed(PUT = seedIn)
+        else if (present(seedStart)) then
+            call calculate_random_seed(seed, seedStart)
+            call random_seed(PUT = seed)
+            deallocate(seed)
+        else
+            call calculate_random_seed(seed)
+            call random_seed(PUT = seed)
+            deallocate(seed)
+        end if
+
+    end subroutine init_random_seed
 end program main_ScaRL
