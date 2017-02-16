@@ -2,26 +2,30 @@ program main_ScaRL
 
     use mpi
     use write_output
+    use read_input
     use str_functions
     use fftw_ScaRL
     use constants_ScaRL
 
     implicit none
 
-    !INPUTS
+    !INPUTS SYSTEM
     integer :: rank, nb_procs
-    double precision, dimension (3) :: xMinGlob = [0d0, 0d0, 0d0]
-    double precision, dimension (3) :: xMaxGlob = [10d0, 10d0, 10d0]
-    double precision, dimension (3) :: corrL = [1d0, 1d0, 1d0]
-    double precision, dimension (3) :: overlap=[3d0,3d0,3d0]
-    integer, dimension(3) :: pointsPerCorrL=[5,5,5]
-    integer :: pointsPerBlockMax = 20
-    integer :: corrMod = cm_GAUSSIAN, margiFirst = fom_LOGNORMAL
-    integer, dimension(:), allocatable :: seedBase
+    !INPUTS FILE
     integer :: nSamples = 3
-    character (len=1024), dimension(:), allocatable :: output_name
     character (len=1024) :: output_folder = "SAMPLES"
+    double precision, dimension (:,:), allocatable :: xMinGlob
+    double precision, dimension (:,:), allocatable :: xMaxGlob
+    double precision, dimension (:,:), allocatable :: corrL
+    integer, dimension(:), allocatable :: corrMod, margiFirst
+    integer, dimension(:), allocatable :: seedBase
+    character (len=1024), dimension(:), allocatable :: output_name
     double precision, dimension(:), allocatable :: avg, CV
+    double precision, dimension (:,:), allocatable :: overlap
+    integer, dimension(:,:), allocatable :: pointsPerCorrL
+    
+    !INPUTS HARD
+    integer :: pointsPerBlockMax = 20
        
     !LOCAL VARIABLES
     integer, dimension(3) :: Np
@@ -36,27 +40,49 @@ program main_ScaRL
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
-    allocate(output_name(nSamples))
-    allocate(avg(nSamples))
-    allocate(CV(nSamples))
-    allocate(seedBase(nSamples))
+    call read_input_ScaRL("./input_ScaRL.txt", rank, &
+                          nSamples, output_folder, &
+                          xMinGlob, xMaxGlob, &
+                          corrL, corrMod, margiFirst, &
+                          seedBase, &
+                          output_name, &
+                          avg, CV, overlap, &
+                          pointsPerCorrL)
     
     
+    !Creating Output Folder 
+    if(rank == 0) then
+        command = 'mkdir -pv '// trim(adjustL(output_folder)) 
+        call system(command)
+    end if
+    call MPI_BARRIER (comm_group ,code)
+
     do s = 1, nSamples !----------------------------
-    
-    output_name(s) = str_cat("sample_", num2str(s))
-    avg(s) = s
-    CV(s) = dble(s)
-    seedBase(s) = s
+    if(rank == 0) print*, "==================================================== "
+    if(rank == 0) print*, "Generating SAMPLE ",s 
+    if(rank == 0) print*, " "
+    if(rank == 0) print*, " "
+    if(rank == 0) print*, " "
+    !output_name(s) = str_cat("sample_", num2str(s))
+    !avg(s) = dble(s)
+    !CV(s) = dble(s)
+    !seedBase(s) = s
+    !xMinGlob(:,s) = [0d0, 0d0, 0d0]
+    !xMaxGlob(:,s) = [10d0, 10d0, 10d0]
+    !corrL(:,s)    = [1d0, 2d0, 3d0]
+    !corrMod(s) = cm_GAUSSIAN
+    !margiFirst(s) = fom_LOGNORMAL
+    !overlap(:,s) = [5d0,5d0,5d0]
+    !pointsPerCorrL(:,s) = [5,5,5]
      
-    call verify_inputs(xMinGlob, xMaxGlob, corrL, & 
-                       overlap, &
-                       pointsPerCorrL, pointsPerBlockMax)
+    call verify_inputs(xMinGlob(:,s), xMaxGlob(:,s), corrL(:,s), & 
+                       overlap(:,s), &
+                       pointsPerCorrL(:,s), pointsPerBlockMax)
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
-    L       = 1+ceiling((xMaxGlob-xMinGlob)/corrL)*(pointsPerCorrL-1)
-    Np_ovlp = ceiling(overlap*dble(pointsPerCorrL))
-    xStep   = corrL/(dble(pointsPerCorrL-1))  
+    L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
+    Np_ovlp = ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)))
+    xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
 
     !Finding place in topology and defining the number of points per processor (Np)
     call decide_topo_shape(nb_procs, L, Np_ovlp, &
@@ -98,30 +124,32 @@ program main_ScaRL
 
         call get_topo_pos(rank, topo_shape, topo_pos)
         
-        !Creating Folders
-        if(rank == 0) then
-            command = 'mkdir -pv '// trim(adjustL(output_folder)) 
-            call system(command)
-        end if
-        call MPI_BARRIER (comm_group ,code)
 
         !Creating Fields
-        call create_fields(Np, Np_ovlp, L, pointsPerCorrL, rank, &
+        call create_fields(Np, Np_ovlp, L, pointsPerCorrL(:,s), rank, &
                            nb_procs, topo_pos, topo_shape, &
-                           xStep, xMinGlob, &
-                           corrL, corrMod, &
+                           xStep, xMinGlob(:,s), &
+                           corrL(:,s), corrMod(s), &
                            seedBase(s), & 
-                           margiFirst, avg(s), CV(s), &
+                           margiFirst(s), avg(s), CV(s), &
                            comm_group, &
                            output_name(s), &
                            output_folder)
     end if
 
+    if(rank == 0) print*, " "
+    if(rank == 0) print*, " "
+    if(rank == 0) print*, "END Generating SAMPLE ",s 
+    if(rank == 0) print*, "==================================================== "
+    if(rank == 0) print*, " "
+    if(rank == 0) print*, " "
     end do !---------------------------------
 
 
     if(allocated(output_name)) deallocate(output_name)
 
+    if(rank == 0) print*, "EXIT CODE: OK " 
+    
     !Finalizing MPI
     call MPI_COMM_FREE (comm_group, code)
     call end_communication()
@@ -287,7 +315,7 @@ program main_ScaRL
                 if(seedStart < 0) seedStart = abs(seedStart)  
             end if
             seedStart = seedStart + rank
-            print*, "Proc = ", rank, "seedStart = ", seedStart
+            !print*, "Proc = ", rank, "seedStart = ", seedStart
             
             call gen_std_gauss_FFT(k_mtx, Np, &
                                    xRange, corrL, corrMod, seedStart)
@@ -301,8 +329,8 @@ program main_ScaRL
             call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
-            call multiVariateTransformation(avg, CV, margiFirst, &
-                                            k_mtx)
+            !call multiVariateTransformation(avg, CV, margiFirst, &
+            !                                k_mtx)
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
@@ -320,7 +348,6 @@ program main_ScaRL
                                      rank, nb_procs,           &
                                      comm_group)
                     if(rank == 0) then
-                        print*, "HDF5 path = ", str_cat(res_folder,"/",output_name,".h5")
                         call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
                                      nb_procs, 3, 1, FFT, seedBase, &
                                      corrMod, margiFirst, &
@@ -507,9 +534,15 @@ program main_ScaRL
         double precision :: avg, std_dev
 
         avg = sum(randField)/dble(size(randField))
+        !print*, "avg BEFORE = ", avg
         randField = randField - avg
+        avg = sum(randField)/dble(size(randField))
+        !print*, "avg AFTER = ", avg
         std_dev = sqrt(sum(randField**2d0)/dble(size(randField)))
+        !print*, "std_dev BEFORE = ", std_dev
         randField = randField/std_dev
+        std_dev = sqrt(sum(randField**2d0)/dble(size(randField)))
+        !print*, "std_dev AFTER = ", std_dev
                 
         end subroutine normalize_field
 

@@ -443,7 +443,7 @@ contains
         write (file,'(A)'      )' </Domain>'
         write (file,'(A)'      )'</Xdmf>'
 
-        print*, "------------END Writing XMF Mono Processor (Elements)----------------"
+        !print*, "------------END Writing XMF Mono Processor (Elements)----------------"
 
     end subroutine write_XMF_Elements
     
@@ -544,7 +544,6 @@ contains
         write (file,'(A)'      )' </Domain>'
         write (file,'(A)'      )'</Xdmf>'
 
-        print*, "------------END Writing XMF Mono Processor (Elements)----------------"
 
     end subroutine write_XMF_global
 !    !---------------------------------------------------------------
