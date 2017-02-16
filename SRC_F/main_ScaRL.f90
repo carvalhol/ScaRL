@@ -16,20 +16,39 @@ program main_ScaRL
     double precision, dimension (3) :: overlap=[3d0,3d0,3d0]
     integer, dimension(3) :: pointsPerCorrL=[5,5,5]
     integer :: pointsPerBlockMax = 20
-    integer :: corrMod = cm_GAUSSIAN
-    integer :: seedBase = 0
-    
+    integer :: corrMod = cm_GAUSSIAN, margiFirst = fom_LOGNORMAL
+    integer, dimension(:), allocatable :: seedBase
+    integer :: nSamples = 3
+    character (len=1024), dimension(:), allocatable :: output_name
+    character (len=1024) :: output_folder = "SAMPLES"
+    double precision, dimension(:), allocatable :: avg, CV
+       
     !LOCAL VARIABLES
     integer, dimension(3) :: Np
     integer :: comm_group
     integer, dimension(3) :: L
     integer, dimension(3) :: Np_ovlp, topo_shape, topo_pos
     double precision, dimension(3) :: xStep
-    !INPUT VARIABLES
+    integer :: color, nb_procs_tmp, rank_tmp, code
+    character (len=1024) :: command
+    integer :: s
 
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
+    allocate(output_name(nSamples))
+    allocate(avg(nSamples))
+    allocate(CV(nSamples))
+    allocate(seedBase(nSamples))
+    
+    
+    do s = 1, nSamples !----------------------------
+    
+    output_name(s) = str_cat("sample_", num2str(s))
+    avg(s) = s
+    CV(s) = dble(s)
+    seedBase(s) = s
+     
     call verify_inputs(xMinGlob, xMaxGlob, corrL, & 
                        overlap, &
                        pointsPerCorrL, pointsPerBlockMax)
@@ -43,30 +62,68 @@ program main_ScaRL
     call decide_topo_shape(nb_procs, L, Np_ovlp, &
                            pointsPerBlockMax, & 
                            topo_shape)
-    Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
-    if(any(Np < 2*Np_ovlp)) then
-        if(rank == 0) print *, "WARNING!! Overlap is too big for this domain"
-        if(rank == 0) print *, "                  the domain will be expanded"
-        if(rank == 0) print *, "        (Consider using fewer procs next time)"
-        where (Np < 2*Np_ovlp) Np = 2*Np_ovlp
+    
+    !Changing to keep only procs used in this topology
+    nb_procs_tmp = nb_procs
+    nb_procs = product(topo_shape)
+    color = 0
+    if(rank >= nb_procs) color = 1
+    call MPI_COMM_SPLIT(MPI_COMM_WORLD, color, rank, comm_group, code)
+    if(nb_procs_tmp /= nb_procs) then
+        if(rank == 0) print*, "WARNING!! Ignoring ", nb_procs_tmp-nb_procs ,"procs"
+        if(rank == 0) print*, "          Consider using ", nb_procs ,"procs next time"
     end if
 
-    if(rank == 0) print *, "topo_shape =", topo_shape
-    if(rank == 0) print *, "L          =", L
-    if(rank == 0) print *, "Np         =", Np
-    if(rank == 0) print *, "Np_ovlp    =", Np_ovlp
-    if(rank == 0) print *, "xStep      =", xStep
+    if(color == 0) then
+        call MPI_COMM_SIZE(comm_group, nb_procs_tmp, code)        
+        call MPI_COMM_RANK(comm_group, rank_tmp, code)
+        if(nb_procs_tmp /= nb_procs .or. rank_tmp /= rank) &
+            stop("ERROR!! Communicator ill-defined")
 
-    call get_topo_pos(rank, topo_shape, topo_pos)
-    
-    !Creating Fields
-    call create_fields(Np, Np_ovlp, rank, &
-                       nb_procs, topo_pos, topo_shape, &
-                       xStep, xMinGlob, &
-                       corrL, corrMod, &
-                       seedBase, comm_group)
+        Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
+        if(any(Np < 2*Np_ovlp)) then
+            if(rank == 0) print *, "WARNING!! Overlap is too big for this domain"
+            if(rank == 0) print *, "                  the domain will be expanded"
+            if(rank == 0) print *, "        (Consider using fewer procs next time)"
+            where (Np < 2*Np_ovlp) Np = 2*Np_ovlp
+        end if
+
+        L = Np*topo_shape - ((topo_shape-1)*Np_ovlp)
+        if(rank == 0) print *, "nb_procs   =", nb_procs
+        if(rank == 0) print *, "topo_shape =", topo_shape
+        if(rank == 0) print *, "L          =", L
+        if(rank == 0) print *, "Np         =", Np
+        if(rank == 0) print *, "Np_ovlp    =", Np_ovlp
+        if(rank == 0) print *, "xStep      =", xStep
+
+        call get_topo_pos(rank, topo_shape, topo_pos)
+        
+        !Creating Folders
+        if(rank == 0) then
+            command = 'mkdir -pv '// trim(adjustL(output_folder)) 
+            call system(command)
+        end if
+        call MPI_BARRIER (comm_group ,code)
+
+        !Creating Fields
+        call create_fields(Np, Np_ovlp, L, pointsPerCorrL, rank, &
+                           nb_procs, topo_pos, topo_shape, &
+                           xStep, xMinGlob, &
+                           corrL, corrMod, &
+                           seedBase(s), & 
+                           margiFirst, avg(s), CV(s), &
+                           comm_group, &
+                           output_name(s), &
+                           output_folder)
+    end if
+
+    end do !---------------------------------
+
+
+    if(allocated(output_name)) deallocate(output_name)
 
     !Finalizing MPI
+    call MPI_COMM_FREE (comm_group, code)
     call end_communication()
 
 
@@ -157,68 +214,86 @@ program main_ScaRL
         !---------------------------------------------
         !---------------------------------------------
         !---------------------------------------------
-        subroutine create_fields(Np, Np_ovlp, rank, &
+        subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
                                  nb_procs, topo_pos, topo_shape, &
                                  xStep, xMinGlob, &
                                  corrL, corrMod, &
-                                 seedBase, comm_group)
+                                 seedBase, &
+                                 margiFirst, avg, CV, &
+                                 comm_group, &
+                                 output_name, res_folder)
             implicit none
             !INPUT
             integer, dimension(3), intent(in) :: Np
             integer, dimension(3), intent(in) :: Np_ovlp
+            integer, dimension(3), intent(in) :: L
+            integer, dimension(3), intent(in) :: pointsPerCorrL
             integer, intent(in) :: rank, comm_group, nb_procs
             integer, dimension(3), intent(in) :: topo_pos, topo_shape
             double precision, dimension(3), intent(in) :: xStep
             double precision, dimension(3), intent(in) :: xMinGlob
             double precision, dimension(3), intent(in) :: corrL
-            integer, intent(in) :: corrMod
+            integer, intent(in) :: corrMod, margiFirst
             integer, intent(in) :: seedBase
+            double precision, intent(in) :: avg, CV
+            character(len=*), intent(in) :: output_name, res_folder
              
             !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
-            character(len=1024) :: HDF5_name, XMF_name, res_folder
-            integer, dimension(3) :: origin
+            character(len=1024) :: HDF5_name, XMF_name
             double precision, dimension(3) :: coord_0, coord_N
+            integer         , dimension(3) :: pos_0, pos_N
+            double precision, dimension(3) :: xMaxGlob
             double precision, dimension(3,nb_procs) :: coord_0_list
             character(len=1024), dimension(nb_procs) :: HDF5_list 
             integer :: temp_rank
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
-            logical :: oneFile=.true.
+            !logical :: oneFile=.false.
+            logical :: oneFile=.true., oneDataSet=.true.
             integer :: partition_type = 1
             integer :: seedStart
-            integer, dimension(:), allocatable :: seed
-            double precision, dimension(3) :: xRange
+            double precision, dimension(3) :: xRange, overlap
             integer :: code
-             
-            res_folder = "."
-            HDF5_name = str_cat("HDF5_proc_",trim(num2str(rank,4)),".h5")
-            XMF_name  = str_cat("XMF_proc_",trim(num2str(rank,4)),".xmf")
-            origin = (Np-Np_ovlp)*topo_pos            
-            coord_0 = dble(origin)*xStep + xMinGlob
-            coord_N = coord_0 + (dble(Np-1)*xStep)
+            
+            pos_0 = (Np-Np_ovlp)*topo_pos + 1
+            pos_N = pos_0 + Np-1            
+            coord_0 = dble(pos_0-1)*xStep + xMinGlob
+            coord_N = dble(pos_N-1)*xStep + xMinGlob
             xRange = coord_N - coord_0
+            overlap = dble(Np_ovlp - 1)*xStep 
+
+            !Discover xMaxGlob
+            call get_topo_pos(nb_procs-1,  &
+                              topo_shape, &
+                              temp_topo_pos)
+            temp_origin = (Np-Np_ovlp)*temp_topo_pos            
+            xMaxGlob = dble(temp_origin)*xStep + xMinGlob + xRange
+            
 
             !k_mtx(:,:,:) = dble(rank)
             k_mtx(:,:,:) = 1d0
+            if(rank == 0) print *, "xMinGlob            = ", xMinGlob
+            if(rank == 0) print *, "xMaxGlob            = ", xMaxGlob
             if(rank == 0) print *, "xRange (processor)  = ", xRange
+            if(rank == 0) print *, "xRange (total)      = ", xMaxGlob - xMinGlob
 
-            if(seedStart >= 0) then
-                !Deterministic Seed
-                seedStart = seedStart + rank
-                call calculate_random_seed(seed, seedStart)
-            else
+            seedStart = seedBase + 1
+            if(seedBase < 0) then
                 !Stochastic Seed
-                if(rank == 0) call calculate_random_seed(seed, seedStart)
-                call MPI_BCAST (seed, size(seed), MPI_INTEGER, 0, comm_group, code)
-                seed = seed + rank
+                if(rank == 0) call calculate_random_nb(seedStart)
+                call MPI_BCAST (seedStart, 1, MPI_INTEGER, 0, comm_group, code)
+                if(seedStart == 0) seedStart = seedStart+1
+                if(seedStart < 0) seedStart = abs(seedStart)  
             end if
-
-            call init_random_seed(seed)
+            seedStart = seedStart + rank
+            print*, "Proc = ", rank, "seedStart = ", seedStart
             
             call gen_std_gauss_FFT(k_mtx, Np, &
-                                   xRange, corrL, corrMod)
+                                   xRange, corrL, corrMod, seedStart)
 
+            call normalize_field(k_mtx)
+            
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                           partition_type, &
                                           topo_pos, topo_shape, &
@@ -226,22 +301,51 @@ program main_ScaRL
             call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
-
+            call multiVariateTransformation(avg, CV, margiFirst, &
+                                            k_mtx)
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
-            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx) 
-            
+            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
             if(oneFile) then 
-                call write_hdf5_multi_proc_3D(coord_0, &
-                                          coord_N,     &
-                                          k_mtx,       &
-                                          "HDF5_global.h5",         &
-                                          res_folder,           &
-                                          rank, nb_procs,           &
-                                          comm_group)
+                if(oneDataSet) then
+                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
+                                     coord_N,     &
+                                     xMinGlob, xMaxGlob, &
+                                     pos_0, pos_N, &
+                                     L, Np, Np_ovlp, &
+                                     k_mtx,       &
+                                     str_cat(output_name,".h5"),  &
+                                     str_cat(output_name,".xmf"),  &
+                                     res_folder,           &
+                                     rank, nb_procs,           &
+                                     comm_group)
+                    if(rank == 0) then
+                        print*, "HDF5 path = ", str_cat(res_folder,"/",output_name,".h5")
+                        call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
+                                     nb_procs, 3, 1, FFT, seedBase, &
+                                     corrMod, margiFirst, &
+                                     topo_shape, &
+                                     xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                     .false.)
+                    end if
+                else 
+                    call write_hdf5_multi_proc_3D(coord_0, &
+                                     coord_N,     &
+                                     xMinGlob, xMaxGlob, &
+                                     pos_0, pos_N, &
+                                     k_mtx,       &
+                                     str_cat(output_name,".h5"),  &
+                                     res_folder,           &
+                                     rank, nb_procs,           &
+                                     comm_group)
+                end if
             else
+                HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
+                XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
                 call write_hdf5_single_proc_3D(coord_0, &
                                            coord_N, &
+                                           xMinGlob, xMaxGlob, &
+                                           pos_0, pos_N, &
                                            k_mtx, &
                                            HDF5_name, &
                                            XMF_name, &
@@ -249,19 +353,22 @@ program main_ScaRL
                                            rank)
             end if
 
-            if(rank==0) then
+            if(rank==0 .and. (.not.(oneFile .and.oneDataSet))) then
+                if(rank == 0) print*, "WRITING GLOBAL XMF" 
                 do temp_rank = 0, nb_procs-1
                     call get_topo_pos(temp_rank,  &
                                       topo_shape, &
                                       temp_topo_pos)
                     HDF5_list(temp_rank+1) = &
-                     str_cat("HDF5_proc_",trim(num2str(temp_rank,4)),".h5")
-                    if(oneFile) HDF5_list(temp_rank+1) = "HDF5_global.h5" 
+                     str_cat(output_name,"_proc_",trim(num2str(temp_rank,5)),".h5")
+                    if(oneFile)  HDF5_list(temp_rank+1) = &
+                                  str_cat(output_name,".h5") 
                     temp_origin = (Np-Np_ovlp)*temp_topo_pos            
                     coord_0_list(:, temp_rank+1) = &
                         dble(temp_origin)*xStep + xMinGlob
                 end do
-                call write_XMF_global("XMF_global.xmf", HDF5_list, &
+                call write_XMF_global(str_cat(res_folder,"/",output_name,".xmf"), &
+                                 HDF5_list, &
                                  coord_0_list, xStep, &
                                  shape(k_mtx), nb_procs)
             end if
@@ -357,7 +464,7 @@ program main_ScaRL
             np_total = nb_procs
             vol_surf_factor_temp = 0D0
 
-            np_start = ceiling(0.9*np_total)
+            np_start = ceiling(0.75*np_total)
             np_end   = np_total
 
             do np = np_start, np_end
@@ -387,6 +494,24 @@ program main_ScaRL
             topo_shape = nFieldsChosen
 
         end subroutine decide_topo_shape
+
+        !-----------------------------------------------------------
+        !-----------------------------------------------------------
+        !-----------------------------------------------------------
+        !-----------------------------------------------------------
+        subroutine normalize_field(randField)
+        implicit none
+        !INPUT OUTPUT 
+        double precision, dimension(:,:,:), intent(inout) :: randField
+        !LOCAL
+        double precision :: avg, std_dev
+
+        avg = sum(randField)/dble(size(randField))
+        randField = randField - avg
+        std_dev = sqrt(sum(randField**2d0)/dble(size(randField)))
+        randField = randField/std_dev
+                
+        end subroutine normalize_field
 
         !-----------------------------------------------------------
         !-----------------------------------------------------------
@@ -694,35 +819,25 @@ program main_ScaRL
     !--------------------------------------------------
     !--------------------------------------------------
     !--------------------------------------------------
-    subroutine calculate_random_seed(seed, seedStart)
+    subroutine calculate_random_nb(nb)
 
         implicit none
-        !INPUT
-        integer, optional, intent(in) :: seedStart
         !OUTPUT
-        integer, dimension(:), allocatable, intent(out) :: seed
+        integer, intent(out) :: nb
         !LOCAL
         integer :: i
         integer :: n
         integer :: clock, tempClock
 
-        if(.not.allocated(seed)) then
-            call random_seed(size = n)
-            allocate(seed(n))
-        end if
         call system_clock(COUNT=clock)
         tempClock = clock
         do while (clock == tempClock)
             call system_clock(COUNT=clock)
         end do
 
-        if(present(seedStart) .and. seedStart>=0) then
-            seed = 72 + seedStart*18 + 37*(/ (i - 1, i = 1, n) /)
-        else
-            seed = clock + 37*(/ (i - 1, i = 1, n) /)
-        end if
+        nb = clock + 37
 
-    end subroutine calculate_random_seed
+    end subroutine calculate_random_nb
     !---------------------------------------
     !---------------------------------------
     !---------------------------------------
@@ -748,4 +863,139 @@ program main_ScaRL
         end if
 
     end subroutine init_random_seed
+    !------------------------------------------------
+    !------------------------------------------------
+    !------------------------------------------------
+    !------------------------------------------------
+    subroutine multiVariateTransformation (avg, CV, margiFirst, &
+                                           randField)
+
+        implicit none
+
+        !INPUT
+        integer          , intent(in) :: margiFirst;
+        double precision , intent(in) :: avg, CV;
+
+        !OUTPUT (IN)
+        double precision, dimension(:,:,:), intent(inout) :: randField;
+
+        !LOCAL VARIABLES
+        double precision :: normalVar, normalAvg
+        integer          :: error, code
+
+        select case (margiFirst)
+        case(fom_GAUSSIAN)
+            normalVar = (CV*avg)**2d0
+            normalAvg = avg
+        case(fom_LOGNORMAL)
+            if(avg <= 0.0D0) then
+                write(*,*) ""
+                write(*,*) "ERROR - when using lognormal fieldAvg should be a positive number"
+                call MPI_ABORT(MPI_COMM_WORLD, error, code)
+            end if
+            normalVar = log(1 + CV**2)
+            normalAvg = log(avg) - normalVar/2d0
+        case default
+            print*, "margiFirst = ", margiFirst
+            stop("First-order marginal not detected")
+        end select
+
+        randField = randField * sqrt(normalVar) &
+                         + normalAvg;
+
+        if (margiFirst == fom_LOGNORMAL) then
+            randField = exp(randField)
+        end if
+
+    end subroutine multiVariateTransformation
+
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    subroutine write_HDF5_attributes(HDF5Path, &
+                                     nb_procs, nDim, Nmc, method, seedStart, &
+                                     corrMod, margiFirst, &
+                                     nFields, &
+                                     xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                     opened)
+        implicit none
+        !INPUTS
+        character (len=*), intent(in) :: HDF5Path
+        integer, intent(in) :: nb_procs, nDim, Nmc, method, &
+                               seedStart, corrMod, margiFirst
+        double precision, dimension(:), intent(in) :: xMinGlob, xMaxGlob, xStep, corrL, overlap
+        integer         , dimension(:), intent(in) :: nFields
+        logical, intent(in) :: opened
+
+        !LOCAL
+        character(len=50) :: attr_name
+        integer(HID_T)  :: file_id       !File identifier
+        integer :: error
+        !integer(kind=8) :: sum_xNTotal, sum_kNTotal
+        !logical :: indep
+
+        if(.not. opened) then
+            call h5open_f(error) ! Initialize FORTRAN interface.
+            call h5fopen_f(trim(HDF5Path), H5F_ACC_RDWR_F, file_id, error) !Open File
+        end if
+
+        !BOOL
+        !indep = RDF%independent
+        !if(MSH%overlap(1) == -2.0D0) indep = .true. !Exception for monoproc cases
+        !attr_name = "independent"
+        !call write_h5attr_bool(file_id, trim(adjustL(attr_name)), indep)
+
+        !INTEGERS
+        attr_name = "nb_procs"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nb_procs)
+        attr_name = "nDim"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nDim)
+        attr_name = "Nmc"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), Nmc)
+        attr_name = "method"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), method)
+        attr_name = "seedStart"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), seedStart)
+        attr_name = "corrMod"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), corrMod)
+        attr_name = "margiFirst"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), margiFirst)
+
+        !INTEGER VEC
+        !attr_name = "seed"
+        !call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), seed)
+        !attr_name = "kNStep"
+        !call write_h5attr_int_vec(file_id, attr_name, kNStep_out)
+        attr_name = "nFields"
+        call write_h5attr_int_vec(file_id, attr_name, nFields)
+        !attr_name = "sum_xNStep"
+        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_xNStep)
+        !attr_name = "sum_kNStep"
+        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_kNStep)
+
+        !DOUBLE VEC
+        attr_name = "xMinGlob"
+        call write_h5attr_real_vec(file_id, attr_name, xMinGlob)
+        attr_name = "xMaxGlob"
+        call write_h5attr_real_vec(file_id, attr_name, xMaxGlob)
+        attr_name = "xStep"
+        call write_h5attr_real_vec(file_id, attr_name, xStep)
+        !attr_name = "kMax"
+        !call write_h5attr_real_vec(file_id, attr_name, RDF%kMax)
+        attr_name = "corrL"
+        call write_h5attr_real_vec(file_id, attr_name, corrL)
+        attr_name = "overlap"
+        call write_h5attr_real_vec(file_id, attr_name, overlap)
+        !attr_name = "procExtent"
+        !call write_h5attr_real_vec(file_id, attr_name, procExtent)
+        !attr_name = "kMax_out"
+        !call write_h5attr_real_vec(file_id, attr_name, kMax_out)
+
+        if(.not. opened) then
+            call h5fclose_f(file_id, error)! Close the file.
+            call h5close_f(error) ! Close FORTRAN interface
+        end if
+
+    end subroutine write_HDF5_attributes
 end program main_ScaRL

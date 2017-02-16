@@ -1,5 +1,6 @@
 module fftw_ScaRL
     use constants_ScaRL
+    use normal_ScaRL
     use, intrinsic :: iso_c_binding
     !include 'fftw3.f'
     include 'fftw3-mpi.f03'
@@ -14,7 +15,8 @@ contains
 
 
 subroutine gen_std_gauss_FFT(data_real_3D, Np, &
-                             xRange, corrL, corrMod)
+                             xRange, corrL, corrMod, &
+                             seed)
 
     implicit none
     !INPUT
@@ -22,6 +24,7 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
     double precision, dimension(3), intent(in) :: xRange
     integer, intent(in) :: corrMod
     double precision, dimension(3), intent(in) :: corrL
+    integer, intent(in) ::  seed
     !INPUT OUTPUT
     double precision, dimension(:,:,:), intent(inout) :: data_real_3D
     !LOCAL
@@ -32,6 +35,9 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
     double precision :: k_max
     double precision, dimension(3) :: delta_k
     integer :: ii, jj, kk
+
+    integer ( kind = 4 ), parameter :: SS = 10
+    real ( kind = 8 ), dimension(2,5) :: r
 
     L = Np(1)
     M = Np(2)
@@ -56,9 +62,11 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
     end select
     
     !Add random variables    
-    call random_number(gammaK(:,:,:))
-    call random_number(phiK(:,:,:))
-    gammaK  = gammaK -0.5
+    call r8vec_uniform_01 ( size(phiK), seed+1000000, phiK )
+    call r8vec_normal_01 ( size(gammaK), seed+2000000, gammaK )
+    !call random_number(gammaK(:,:,:))
+    !call random_number(phiK(:,:,:))
+    !gammaK  = gammaK -0.5
     Sk_mtx  = gammak*sqrt(Sk_mtx)*cos(2.0D0*PI*phik);
     
     !Process FFT (local)
