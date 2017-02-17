@@ -317,23 +317,30 @@ program main_ScaRL
             seedStart = seedStart + rank
             !print*, "Proc = ", rank, "seedStart = ", seedStart
             
+            if(rank == 0) print*, "gen_std_gauss_FFT " 
             call gen_std_gauss_FFT(k_mtx, Np, &
                                    xRange, corrL, corrMod, seedStart)
 
+            if(rank == 0) print*, "normalize_field " 
             call normalize_field(k_mtx)
             
+            if(rank == 0) print*, "apply_UnityPartition " 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                           partition_type, &
                                           topo_pos, topo_shape, &
                                           k_mtx)
+            
+            if(rank == 0) print*, "add_overlap " 
             call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
-            !call multiVariateTransformation(avg, CV, margiFirst, &
-            !                                k_mtx)
+            if(rank == 0) print*, "multivariateTransformation " 
+            call multiVariateTransformation(avg, CV, margiFirst, &
+                                            k_mtx)
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
+            if(rank == 0) print*, "write HDF5 " 
             if(oneFile) then 
                 if(oneDataSet) then
                     call write_hdf5_multi_proc_3D_1ds(coord_0, &

@@ -91,11 +91,14 @@ contains
         call h5dclose_f(dset_id, error) !CLOSE dset_id
         call h5sclose_f(filespace, error) !CLOSE filespace
        
-        call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
-        
-        allocate(randField_3D_temp(size(randField_3D,1), &
+        print*, "nb_procs = ", nb_procs       
+        if(nb_procs>1) then
+            call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
+            allocate(randField_3D_temp(size(randField_3D,1), &
                                    size(randField_3D,2), &
                                    size(randField_3D,3)))
+        end if
+
         do i = 2, nb_procs
         ds_name = "sample_1_p"//num2str(i-1)
         call MPI_RECV(randField_3D_temp, size(randField_3D_temp), MPI_DOUBLE_PRECISION, &
@@ -302,12 +305,14 @@ contains
                         mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
 
         call write_h5attr_real_vec(dset_id, "xMin", xMin)
-       
-        call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
-        
-        allocate(randField_3D_temp(size(randField_3D,1), &
+      
+        if(nb_procs > 1) then 
+            call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
+            allocate(randField_3D_temp(size(randField_3D,1), &
                                    size(randField_3D,2), &
                                    size(randField_3D,3)))
+        end if
+
         do i = 2, nb_procs
         call MPI_RECV(randField_3D_temp, size(randField_3D_temp), MPI_DOUBLE_PRECISION, &
                       i-1, 0, comm, statut, error)
