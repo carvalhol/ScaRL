@@ -3,7 +3,7 @@
 #--------------------------------
 "Sample_Test_1" #Sample name <string, in-between quotes>
 0d0 0d0 0d0     #Coodinate Min (X,Y,Z) <double>
-30d0 30d0 30d0  #Coordinate Max (X, Y, Z) <double>
+5d0 10d0 15d0   #Coordinate Max (X, Y, Z) <double>
 1d0 1d0 1d0     #Correlation Lenghts (X,Y,Z) <double>
 5d0 5d0 5d0     #Overlap (in correlation lengths) (X,Y,Z) <double>
 5 5 5           #Points per Correlation Length (X,Y,Z) <integer>

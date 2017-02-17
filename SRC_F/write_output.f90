@@ -134,6 +134,41 @@ contains
 
     end subroutine write_hdf5_multi_proc_3D
     
+    subroutine write_constant_field(xMinGlob, xMaxGlob, &
+                                     avg, output_name, &
+                                     res_folder)
+        implicit none
+        !INPUTS
+        double precision, dimension(3), intent(in) :: xMinGlob, xMaxGlob
+        double precision, intent(in) :: avg
+        character(len=*), intent(in) :: output_name, res_folder
+        !Local
+        double precision, dimension(2,2,2) :: constant_field
+        character(len=1024) :: HDF5_name, XMF_name
+        double precision, dimension(3) :: xStep
+
+        HDF5_name = str_cat(output_name,".h5")
+        XMF_name  = str_cat(output_name,".xmf")
+
+        constant_field = avg
+        xStep = xMaxGlob - xMinGlob
+
+        call write_hdf5_single_proc_3D(xMinGlob, xMaxGlob, &
+                                       xMinGlob, xMaxGlob, &
+                                       [1,1,1], [2,2,2], &
+                                       constant_field, &
+                                       HDF5_name, XMF_name,      &
+                                       res_folder)
+        
+        call write_HDF5_attributes(str_cat(res_folder,"/",HDF5_name), &
+                                     1, 3, 1, -1, -1, &
+                                     -1, -1, &
+                                     [1,1,1], &
+                                     xMinGlob, xMaxGlob, xStep, &
+                                     [-1d0,-1d0,-1d0], [0d0,0d0,0d0], &
+                                     .false.)
+         
+    end subroutine write_constant_field
     !-----------------------------------------------------
     !-----------------------------------------------------
     !-----------------------------------------------------
@@ -154,7 +189,7 @@ contains
         integer         , dimension(3)    , intent(in) :: pos_0, pos_N
         double precision, dimension(:,:,:), intent(in) :: randField_3D
         character(len=*)          :: HDF5_name, XMF_name, res_folder
-        integer, intent(in) :: rank
+        integer, intent(in), optional :: rank
         
         !HDF5 VARIABLES
         character(len=1024)          :: H5_TO_XMF_Path
@@ -177,7 +212,8 @@ contains
         !PREPARING ENVIROMENT
         ds_rank = 3
         ds_size = shape(randField_3D)
-        ds_name = "sample_1_p"//num2str(rank)
+        ds_name = "samples"
+        if(present(rank)) ds_name = "sample_1_p"//num2str(rank)
         HDF5_path = str_cat(res_folder,"/",HDF5_name)
         XMF_path  = str_cat(res_folder,"/",XMF_name) 
 
@@ -284,7 +320,7 @@ contains
         ds_rank = 3
         ds_size = L
         local_size = Np
-        ds_name = "sample_1_global"
+        ds_name = "samples"
         HDF5_path = str_cat(res_folder,"/",HDF5_name)
         if(rank == 0) print*, "HDF5_path =", trim(HDF5_path)
 
@@ -591,4 +627,93 @@ contains
 
     end subroutine mount_hdf5_files
 
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    subroutine write_HDF5_attributes(HDF5Path, &
+                                     nb_procs, nDim, Nmc, method, seedStart, &
+                                     corrMod, margiFirst, &
+                                     nFields, &
+                                     xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                     opened)
+        implicit none
+        !INPUTS
+        character (len=*), intent(in) :: HDF5Path
+        integer, intent(in) :: nb_procs, nDim, Nmc, method, &
+                               seedStart, corrMod, margiFirst
+        double precision, dimension(:), intent(in) :: xMinGlob, xMaxGlob, xStep, corrL, overlap
+        integer         , dimension(:), intent(in) :: nFields
+        logical, intent(in) :: opened
+
+        !LOCAL
+        character(len=50) :: attr_name
+        integer(HID_T)  :: file_id       !File identifier
+        integer :: error
+        !integer(kind=8) :: sum_xNTotal, sum_kNTotal
+        !logical :: indep
+
+        if(.not. opened) then
+            call h5open_f(error) ! Initialize FORTRAN interface.
+            call h5fopen_f(trim(HDF5Path), H5F_ACC_RDWR_F, file_id, error) !Open File
+        end if
+
+        !BOOL
+        !indep = RDF%independent
+        !if(MSH%overlap(1) == -2.0D0) indep = .true. !Exception for monoproc cases
+        !attr_name = "independent"
+        !call write_h5attr_bool(file_id, trim(adjustL(attr_name)), indep)
+
+        !INTEGERS
+        attr_name = "nb_procs"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nb_procs)
+        attr_name = "nDim"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nDim)
+        attr_name = "Nmc"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), Nmc)
+        attr_name = "method"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), method)
+        attr_name = "seedStart"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), seedStart)
+        attr_name = "corrMod"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), corrMod)
+        attr_name = "margiFirst"
+        call write_h5attr_int(file_id, trim(adjustL(attr_name)), margiFirst)
+
+        !INTEGER VEC
+        !attr_name = "seed"
+        !call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), seed)
+        !attr_name = "kNStep"
+        !call write_h5attr_int_vec(file_id, attr_name, kNStep_out)
+        attr_name = "nFields"
+        call write_h5attr_int_vec(file_id, attr_name, nFields)
+        !attr_name = "sum_xNStep"
+        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_xNStep)
+        !attr_name = "sum_kNStep"
+        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_kNStep)
+
+        !DOUBLE VEC
+        attr_name = "xMinGlob"
+        call write_h5attr_real_vec(file_id, attr_name, xMinGlob)
+        attr_name = "xMaxGlob"
+        call write_h5attr_real_vec(file_id, attr_name, xMaxGlob)
+        attr_name = "xStep"
+        call write_h5attr_real_vec(file_id, attr_name, xStep)
+        !attr_name = "kMax"
+        !call write_h5attr_real_vec(file_id, attr_name, RDF%kMax)
+        attr_name = "corrL"
+        call write_h5attr_real_vec(file_id, attr_name, corrL)
+        attr_name = "overlap"
+        call write_h5attr_real_vec(file_id, attr_name, overlap)
+        !attr_name = "procExtent"
+        !call write_h5attr_real_vec(file_id, attr_name, procExtent)
+        !attr_name = "kMax_out"
+        !call write_h5attr_real_vec(file_id, attr_name, kMax_out)
+
+        if(.not. opened) then
+            call h5fclose_f(file_id, error)! Close the file.
+            call h5close_f(error) ! Close FORTRAN interface
+        end if
+
+    end subroutine write_HDF5_attributes
 end module write_output

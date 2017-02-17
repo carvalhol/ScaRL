@@ -1,6 +1,7 @@
 module read_input
 
     use str_functions
+    use mpi
     implicit none
     
 
@@ -28,8 +29,8 @@ contains
                                     corrL, corrMod, margiFirst, &
                                     seedBase, &
                                     output_name, &
-                                    avg, CV, overlap, &
-                                    pointsPerCorrL)
+                                    avg, std_dev, overlap, &
+                                    pointsPerCorrL, comm_group)
             implicit none
             !INPUT
             character(len=*), intent(in) :: file_path
@@ -43,109 +44,143 @@ contains
             integer, dimension(:), allocatable, intent(out) :: corrMod, margiFirst
             integer, dimension(:), allocatable, intent(out) :: seedBase
             character (len=1024), dimension(:), allocatable, intent(out) :: output_name
-            double precision, dimension(:), allocatable, intent(out) :: avg, CV
+            double precision, dimension(:), allocatable, intent(out) :: avg, std_dev
             double precision, dimension (:,:), allocatable, intent(out) :: overlap
             integer, dimension(:,:), allocatable, intent(out) :: pointsPerCorrL
+            integer, intent(in) :: comm_group
             !LOCAL
             character(len=1024) :: buffer
             integer :: fid
-            integer :: s
+            integer :: s, error, code
 
-        if(fileExist("./random.spec")) then
+        if(rank == 0) then
+            if(fileExist("./random.spec")) then
 
-            if(rank == 0) print*, "WARNING: 'random.spec' found, generating files for SEM"   
-            if(.not. fileExist("./domains.txt")) &
-                 stop("'domains.txt'NOT FOUND (Did you run the mesher?")
-            call read_input_SEM(rank, &
-                                nSamples, output_folder, &
-                                xMinGlob, xMaxGlob, &
-                                corrL, corrMod, margiFirst, &
-                                seedBase, &
-                                output_name, &
-                                avg, CV, overlap, &
-                                pointsPerCorrL)
-        else
+                if(rank == 0) print*, "WARNING: 'random.spec' found, generating files for SEM"   
+                if(.not. fileExist("./domains.txt")) then
+                    print*, "'domains.txt'NOT FOUND (Did you run the mesher?"
+                    call MPI_ABORT(comm_group, error, code)
+                end if
+                call read_input_SEM(rank, &
+                                    nSamples, output_folder, &
+                                    xMinGlob, xMaxGlob, &
+                                    corrL, corrMod, margiFirst, &
+                                    seedBase, &
+                                    output_name, &
+                                    avg, std_dev, overlap, &
+                                    pointsPerCorrL)
+            else
 
-            if(rank == 0) print*, "READING INPUT FROM ", trim(adjustL(file_path))   
+                if(rank == 0) print*, "READING INPUT FROM ", trim(adjustL(file_path))   
 
-            open (unit = fid , file = file_path, action = 'read', status="old", form="formatted")
-                
-               
-                buffer = getLine(fid, '#') !output folder
-                read(buffer,*) output_folder
-                if(rank == 0) print*, "output folder = ", trim(adjustL(output_folder))
+                open (unit = fid , file = file_path, action = 'read', status="old", form="formatted")
+                    
+                   
+                    buffer = getLine(fid, '#') !output folder
+                    read(buffer,*) output_folder
+                    if(rank == 0) print*, "output folder = ", trim(adjustL(output_folder))
 
-                buffer = getLine(fid, '#') !Number of Samples
-                read(buffer,*) nSamples
-                if(rank == 0) print*, "Number of Samples = ", nSamples
+                    buffer = getLine(fid, '#') !Number of Samples
+                    read(buffer,*) nSamples
+                    if(rank == 0) print*, "Number of Samples = ", nSamples
 
-                allocate(output_name(nSamples))
-                allocate(xMinGlob(3,nSamples))    
-                allocate(xMaxGlob(3,nSamples))
-                allocate(corrL(3,nSamples))
-                allocate(overlap(3,nSamples))
-                allocate(pointsPerCorrL(3,nSamples))
-                allocate(corrMod(nSamples))
-                allocate(margiFirst(nSamples))
-                allocate(avg(nSamples))
-                allocate(CV(nSamples))
-                allocate(seedBase(nSamples))
+                    allocate(output_name(nSamples))
+                    allocate(xMinGlob(3,nSamples))    
+                    allocate(xMaxGlob(3,nSamples))
+                    allocate(corrL(3,nSamples))
+                    allocate(overlap(3,nSamples))
+                    allocate(pointsPerCorrL(3,nSamples))
+                    allocate(corrMod(nSamples))
+                    allocate(margiFirst(nSamples))
+                    allocate(avg(nSamples))
+                    allocate(std_dev(nSamples))
+                    allocate(seedBase(nSamples))
 
-                do s = 1, nSamples
-                
-                if(rank == 0) print*, " "
-                if(rank == 0) print*, " "
-                if(rank == 0) print*, "SAMPLE ", s, "----------"
-                
-                buffer = getLine(fid, '#') !sample name
-                read(buffer,*) output_name(s)
-                if(rank == 0) print*, "sample name = ", trim(adjustL(output_name(s)))
-                
-                buffer = getLine(fid, '#') !xMinGlob
-                read(buffer,*) xMinGlob(:,s)
-                if(rank == 0) print*, "xMinGlob = ", xMinGlob(:,s)
+                    do s = 1, nSamples
+                    
+                    if(rank == 0) print*, " "
+                    if(rank == 0) print*, " "
+                    if(rank == 0) print*, "SAMPLE ", s, "----------"
+                    
+                    buffer = getLine(fid, '#') !sample name
+                    read(buffer,*) output_name(s)
+                    if(rank == 0) print*, "sample name = ", trim(adjustL(output_name(s)))
+                    
+                    buffer = getLine(fid, '#') !xMinGlob
+                    read(buffer,*) xMinGlob(:,s)
+                    if(rank == 0) print*, "xMinGlob = ", xMinGlob(:,s)
 
-                buffer = getLine(fid, '#') !xMaxGlob
-                read(buffer,*) xMaxGlob(:,s)
-                if(rank == 0) print*, "xMaxGlob = ", xMaxGlob(:,s)
-                
-                buffer = getLine(fid, '#') !corrL
-                read(buffer,*) corrL(:,s)
-                if(rank == 0) print*, "corrL = ", corrL(:,s)
-                
-                buffer = getLine(fid, '#') !overlap
-                read(buffer,*) overlap(:,s)
-                if(rank == 0) print*, "overlap = ", overlap(:,s)
-                
-                buffer = getLine(fid, '#') !pointsPerCorrL
-                read(buffer,*) pointsPerCorrL(:,s)
-                if(rank == 0) print*, "pointsPerCorrL = ", pointsPerCorrL(:,s)
-                
-                buffer = getLine(fid, '#') !corrMod
-                read(buffer,*) corrMod(s)
-                if(rank == 0) print*, "corrMod = ", corrMod(s)
-                
-                buffer = getLine(fid, '#') !margiFirst
-                read(buffer,*) margiFirst(s)
-                if(rank == 0) print*, "first order marginal = ", margiFirst(s)
-                
-                buffer = getLine(fid, '#') !avg
-                read(buffer,*) avg(s)
-                if(rank == 0) print*, "avg = ", avg(s)
-                
-                buffer = getLine(fid, '#') !standard deviation
-                read(buffer,*) CV(s)
-                if(rank == 0) print*, "CV = ", CV(s)
-                
-                buffer = getLine(fid, '#') !random seed
-                read(buffer,*) seedBase(s)
-                if(rank == 0) print*, "random seed = ", seedBase(s)
-                
-                end do
+                    buffer = getLine(fid, '#') !xMaxGlob
+                    read(buffer,*) xMaxGlob(:,s)
+                    if(rank == 0) print*, "xMaxGlob = ", xMaxGlob(:,s)
+                    
+                    buffer = getLine(fid, '#') !corrL
+                    read(buffer,*) corrL(:,s)
+                    if(rank == 0) print*, "corrL = ", corrL(:,s)
+                    
+                    buffer = getLine(fid, '#') !overlap
+                    read(buffer,*) overlap(:,s)
+                    if(rank == 0) print*, "overlap = ", overlap(:,s)
+                    
+                    buffer = getLine(fid, '#') !pointsPerCorrL
+                    read(buffer,*) pointsPerCorrL(:,s)
+                    if(rank == 0) print*, "pointsPerCorrL = ", pointsPerCorrL(:,s)
+                    
+                    buffer = getLine(fid, '#') !corrMod
+                    read(buffer,*) corrMod(s)
+                    if(rank == 0) print*, "corrMod = ", corrMod(s)
+                    
+                    buffer = getLine(fid, '#') !margiFirst
+                    read(buffer,*) margiFirst(s)
+                    if(rank == 0) print*, "first order marginal = ", margiFirst(s)
+                    
+                    buffer = getLine(fid, '#') !avg
+                    read(buffer,*) avg(s)
+                    if(rank == 0) print*, "avg = ", avg(s)
+                    
+                    buffer = getLine(fid, '#') !standard deviation
+                    read(buffer,*) std_dev(s)
+                    if(rank == 0) print*, "std_dev = ", std_dev(s)
+                    
+                    buffer = getLine(fid, '#') !random seed
+                    read(buffer,*) seedBase(s)
+                    if(rank == 0) print*, "random seed = ", seedBase(s)
+                    
+                    end do
 
-            close (fid)
+                close (fid)
 
+            end if
         end if
+        
+        !Passing information to others
+        call MPI_BCAST (nSamples, 1, MPI_INTEGER, 0, comm_group, code)
+        print*, "rank ", rank, "nSamples", nSamples   
+        if(rank /= 0) then     
+            allocate(output_name(nSamples))
+            allocate(xMinGlob(3,nSamples))    
+            allocate(xMaxGlob(3,nSamples))
+            allocate(corrL(3,nSamples))
+            allocate(overlap(3,nSamples))
+            allocate(pointsPerCorrL(3,nSamples))
+            allocate(corrMod(nSamples))
+            allocate(margiFirst(nSamples))
+            allocate(avg(nSamples))
+            allocate(std_dev(nSamples))
+            allocate(seedBase(nSamples))
+        end if
+        
+        call MPI_BCAST (output_name, nSamples*len(output_name), MPI_CHARACTER, 0, comm_group, code)
+        call MPI_BCAST (xMinGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
+        call MPI_BCAST (xMaxGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
+        call MPI_BCAST (corrL,    3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
+        call MPI_BCAST (overlap,  3*nSamples, MPI_INTEGER         , 0, comm_group, code)
+        call MPI_BCAST (pointsPerCorrL, 3*nSamples, MPI_INTEGER   , 0, comm_group, code)
+        call MPI_BCAST (corrMod   , nSamples, MPI_INTEGER   , 0, comm_group, code)
+        call MPI_BCAST (margiFirst, nSamples, MPI_INTEGER   , 0, comm_group, code)
+        call MPI_BCAST (avg   , nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
+        call MPI_BCAST (std_dev   , nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
+        call MPI_BCAST (seedBase  , nSamples, MPI_INTEGER   , 0, comm_group, code)
         
         end subroutine read_input_ScaRL
         
@@ -159,7 +194,7 @@ contains
                                    corrL, corrMod, margiFirst, &
                                    seedBase, &
                                    output_name, &
-                                   avg, CV, overlap, &
+                                   avg, std_dev, overlap, &
                                    pointsPerCorrL)
             implicit none
             !INPUT
@@ -173,7 +208,7 @@ contains
             integer, dimension(:), allocatable, intent(out) :: corrMod, margiFirst
             integer, dimension(:), allocatable, intent(out) :: seedBase
             character (len=1024), dimension(:), allocatable, intent(out) :: output_name
-            double precision, dimension(:), allocatable, intent(out) :: avg, CV
+            double precision, dimension(:), allocatable, intent(out) :: avg, std_dev
             double precision, dimension (:,:), allocatable, intent(out) :: overlap
             integer, dimension(:,:), allocatable, intent(out) :: pointsPerCorrL
             !LOCAL
@@ -196,7 +231,7 @@ contains
 
             fid_2 = 19
 
-            print*, "READING random.spec"
+            if(rank == 0) print*, "READING random.spec"
             open (unit = fid_2 , file = "./random.spec", action = 'read', status="old", form="formatted")
 
                 !!1)  Counting number of samples to be generated
@@ -205,7 +240,6 @@ contains
                 read(buffer,*) nMat
                 allocate(nProp_Mat(0:nMat-1))
                 allocate(nb_Mat(0:nMat-1))
-                print*, "nMat = ", nMat
                 do mat = 0, nMat - 1
                     buffer = getLine(fid_2, '#') !Material Number
                     read(buffer,*) nb_Mat(mat)
@@ -219,7 +253,6 @@ contains
 
                 nSamples = sum(nProp_Mat(:))
                 allocate(prop(0:nSamples-1))
-                print*, "size(prop) = ", size(prop)
 
                 !!2) Reading Samples Properties
                 rewind(fid_2)
@@ -232,7 +265,7 @@ contains
                     read(buffer,*) VP_VS_RHO_flag
                     if(VP_VS_RHO_flag == 1) then
                         read(buffer,*) VP_VS_RHO_flag, VP, VS, RHO
-                        print*, "VP = ", VP, "VS = ", VS, "RHO = ", RHO
+                        !print*, "VP = ", VP, "VS = ", VS, "RHO = ", RHO
                     end if
                     buffer = getLine(fid_2, '#') !Number of Properties
                     do j = 1, nProp_Mat(mat)
@@ -267,14 +300,13 @@ contains
 
             close(fid_2)
 
-            print*, "READING domains.txt"
+            if(rank == 0) print*, "READING domains.txt"
             allocate(bbox_min(0:2,0:nMat-1))
             allocate(bbox_max(0:2,0:nMat-1))
             
             open (unit = fid_2 , file = "./domains.txt", action = 'read', status="old", form="formatted")
                 
                 buffer = getLine(fid_2, '#')
-                write(*,*) "buffer = ", trim(adjustL(buffer))
                 
                 do while (trim(adjustL(buffer)) /= "eof_gl")
                    
@@ -318,16 +350,12 @@ contains
             allocate(corrMod(nSamples))
             allocate(margiFirst(nSamples))
             allocate(avg(nSamples))
-            allocate(CV(nSamples))
+            allocate(std_dev(nSamples))
             allocate(seedBase(nSamples))
 
-            print*, "nSamples = ", nSamples
-            
-            output_folder = "./mat"
+            output_folder = "./mat/h5"
 
-            print*, "size(prop) = ", size(prop)
             do s = 1, nSamples
-                print*, "s = ", s 
                 output_name(s)               = str_cat("Mat_",num2str(prop(s-1)%mat), &
                                                        "_",prop(s-1)%name)
                 xMinGlob(:,s)                = prop(s-1)%bbox_min
@@ -340,7 +368,7 @@ contains
                 corrMod(s)                   = prop(s-1)%corrMod
                 margiFirst(s)                = prop(s-1)%margiF
                 avg(s)                       = prop(s-1)%avg
-                CV(s)                        = prop(s-1)%CV !TODO Change the left CV by std_dev
+                std_dev(s)                   = prop(s-1)%CV*prop(s-1)%avg
                 seedBase(s)                  = prop(s-1)%seedStart
             end do
 

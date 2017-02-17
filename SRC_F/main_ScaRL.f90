@@ -20,7 +20,7 @@ program main_ScaRL
     integer, dimension(:), allocatable :: corrMod, margiFirst
     integer, dimension(:), allocatable :: seedBase
     character (len=1024), dimension(:), allocatable :: output_name
-    double precision, dimension(:), allocatable :: avg, CV
+    double precision, dimension(:), allocatable :: avg, std_dev
     double precision, dimension (:,:), allocatable :: overlap
     integer, dimension(:,:), allocatable :: pointsPerCorrL
     
@@ -46,8 +46,8 @@ program main_ScaRL
                           corrL, corrMod, margiFirst, &
                           seedBase, &
                           output_name, &
-                          avg, CV, overlap, &
-                          pointsPerCorrL)
+                          avg, std_dev, overlap, &
+                          pointsPerCorrL, comm_group)
     
     
     !Creating Output Folder 
@@ -76,7 +76,7 @@ program main_ScaRL
     !pointsPerCorrL(:,s) = [5,5,5]
      
     call verify_inputs(xMinGlob(:,s), xMaxGlob(:,s), corrL(:,s), & 
-                       overlap(:,s), &
+                       overlap(:,s), avg(s), std_dev(s), corrMod(s), margiFirst(s),&
                        pointsPerCorrL(:,s), pointsPerBlockIdeal)
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
@@ -105,6 +105,18 @@ program main_ScaRL
         call MPI_COMM_RANK(comm_group, rank_tmp, code)
         if(nb_procs_tmp /= nb_procs .or. rank_tmp /= rank) &
             stop("ERROR!! Communicator ill-defined")
+
+        if(std_dev(s) == 0d0) then
+            if(rank == 0) then
+                print*, "constant field"
+                call write_constant_field(xMinGlob(:,s), &
+                                                     xMaxGlob(:,s), &
+                                                     avg(s),        &
+                                                     output_name(s), &
+                                                     output_folder)
+            end if
+            cycle
+        end if
 
         Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
 
@@ -139,7 +151,7 @@ program main_ScaRL
                            xStep, xMinGlob(:,s), &
                            corrL(:,s), corrMod(s), &
                            seedBase(s), & 
-                           margiFirst(s), avg(s), CV(s), &
+                           margiFirst(s), avg(s), std_dev(s), &
                            comm_group, &
                            output_name(s), &
                            output_folder)
@@ -209,13 +221,17 @@ program main_ScaRL
         !---------------------------------------------------------------------------------
         !---------------------------------------------------------------------------------
         subroutine verify_inputs(xMinGlob, xMaxGlob, corrL, &
-                                 overlap, & 
+                                 overlap, avg, std_dev, corrMod, margiFirst, & 
                                  pointsPerCorrL, pointsPerBlockIdeal)
-        
+       
+        implicit none 
         double precision, dimension (3), intent(in) :: xMinGlob
         double precision, dimension (3), intent(in) :: xMaxGlob
         double precision, dimension (3), intent(in) :: corrL
         double precision, dimension (3), intent(in) :: overlap
+        double precision, intent(in) :: avg
+        double precision, intent(in) :: std_dev
+        integer, intent(in) :: corrMod, margiFirst
         integer, dimension(3), intent(in) :: pointsPerCorrL
         integer(kind=8), intent(in) :: pointsPerBlockIdeal
 
@@ -234,7 +250,29 @@ program main_ScaRL
             print*, "overlap = ", corrL
             print*, "WARNING: overlap < 0d0, the mesh will be discontinuous"
         end if 
+
+        if((corrMod /= cm_GAUSSIAN)) then
+            print*, "corrMod = ", corrMod
+            stop("ERROR: Correlation model not implemented")
+        end if
+         
+        if((margiFirst /= fom_GAUSSIAN) .and. &
+            (margiFirst /= fom_LOGNORMAL)) then
+            print*, "margiFirst = ", margiFirst
+            stop("ERROR: First-order marginal not implemented")
+        end if
         
+        if((avg <= 0d0) .and. (margiFirst == fom_LOGNORMAL)) then
+            print*, "       avg = ", avg
+            print*, "margiFirst = ", margiFirst
+            stop("ERROR: When using lognormal first-order marginal density the average should be greater than 0")
+        end if 
+        
+        if((std_dev < 0d0)) then
+            print*, " std_dev = ", std_dev
+            stop("ERROR: Standard deviation should not be smaller than 0d0")
+        end if
+         
         if(any(pointsPerCorrL < 2)) then
             print*, "pointsPerCorrL = ", pointsPerCorrL
             stop("ERROR: PointsPerCorrL < 2")
@@ -255,7 +293,7 @@ program main_ScaRL
                                  xStep, xMinGlob, &
                                  corrL, corrMod, &
                                  seedBase, &
-                                 margiFirst, avg, CV, &
+                                 margiFirst, avg, std_dev, &
                                  comm_group, &
                                  output_name, res_folder)
             implicit none
@@ -271,7 +309,7 @@ program main_ScaRL
             double precision, dimension(3), intent(in) :: corrL
             integer, intent(in) :: corrMod, margiFirst
             integer, intent(in) :: seedBase
-            double precision, intent(in) :: avg, CV
+            double precision, intent(in) :: avg, std_dev
             character(len=*), intent(in) :: output_name, res_folder
              
             !LOCAL
@@ -309,6 +347,13 @@ program main_ScaRL
 
             !k_mtx(:,:,:) = dble(rank)
             k_mtx(:,:,:) = 1d0
+            if(rank == 0) print *, "Np                  = ", Np
+            if(rank == 0) print *, "Np_ovlp             = ", Np_ovlp
+            if(rank == 0) print *, "topo_pos            = ", topo_pos
+            if(rank == 0) print *, "pos_0               = ", pos_0
+            if(rank == 0) print *, "pos_N               = ", pos_N
+            if(rank == 0) print *, "coord_0             = ", coord_0
+            if(rank == 0) print *, "coord_N             = ", coord_N
             if(rank == 0) print *, "xMinGlob            = ", xMinGlob
             if(rank == 0) print *, "xMaxGlob            = ", xMaxGlob
             if(rank == 0) print *, "xRange (processor)  = ", xRange
@@ -343,7 +388,7 @@ program main_ScaRL
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
             if(rank == 0) print*, "multivariateTransformation " 
-            call multiVariateTransformation(avg, CV, margiFirst, &
+            call multiVariateTransformation(avg, std_dev, margiFirst, &
                                             k_mtx)
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
@@ -923,17 +968,17 @@ program main_ScaRL
     !------------------------------------------------
     !------------------------------------------------
     !------------------------------------------------
-    subroutine multiVariateTransformation (avg, CV, margiFirst, &
+    subroutine multiVariateTransformation (avg, std_dev, margiFirst, &
                                            randField)
 
         implicit none
 
         !INPUT
-        integer          , intent(in) :: margiFirst;
-        double precision , intent(in) :: avg, CV;
+        integer          , intent(in) :: margiFirst
+        double precision , intent(in) :: avg, std_dev
 
         !OUTPUT (IN)
-        double precision, dimension(:,:,:), intent(inout) :: randField;
+        double precision, dimension(:,:,:), intent(inout) :: randField
 
         !LOCAL VARIABLES
         double precision :: normalVar, normalAvg
@@ -941,7 +986,7 @@ program main_ScaRL
 
         select case (margiFirst)
         case(fom_GAUSSIAN)
-            normalVar = (CV*avg)**2d0
+            normalVar = (std_dev)**2d0
             normalAvg = avg
         case(fom_LOGNORMAL)
             if(avg <= 0.0D0) then
@@ -949,7 +994,7 @@ program main_ScaRL
                 write(*,*) "ERROR - when using lognormal fieldAvg should be a positive number"
                 call MPI_ABORT(MPI_COMM_WORLD, error, code)
             end if
-            normalVar = log(1 + CV**2)
+            normalVar = log(1d0 + (std_dev/avg)**2d0)
             normalAvg = log(avg) - normalVar/2d0
         case default
             print*, "margiFirst = ", margiFirst
@@ -965,93 +1010,4 @@ program main_ScaRL
 
     end subroutine multiVariateTransformation
 
-    !---------------------------------------------------------------------
-    !---------------------------------------------------------------------
-    !---------------------------------------------------------------------
-    !---------------------------------------------------------------------
-    subroutine write_HDF5_attributes(HDF5Path, &
-                                     nb_procs, nDim, Nmc, method, seedStart, &
-                                     corrMod, margiFirst, &
-                                     nFields, &
-                                     xMinGlob, xMaxGlob, xStep, corrL, overlap, &
-                                     opened)
-        implicit none
-        !INPUTS
-        character (len=*), intent(in) :: HDF5Path
-        integer, intent(in) :: nb_procs, nDim, Nmc, method, &
-                               seedStart, corrMod, margiFirst
-        double precision, dimension(:), intent(in) :: xMinGlob, xMaxGlob, xStep, corrL, overlap
-        integer         , dimension(:), intent(in) :: nFields
-        logical, intent(in) :: opened
-
-        !LOCAL
-        character(len=50) :: attr_name
-        integer(HID_T)  :: file_id       !File identifier
-        integer :: error
-        !integer(kind=8) :: sum_xNTotal, sum_kNTotal
-        !logical :: indep
-
-        if(.not. opened) then
-            call h5open_f(error) ! Initialize FORTRAN interface.
-            call h5fopen_f(trim(HDF5Path), H5F_ACC_RDWR_F, file_id, error) !Open File
-        end if
-
-        !BOOL
-        !indep = RDF%independent
-        !if(MSH%overlap(1) == -2.0D0) indep = .true. !Exception for monoproc cases
-        !attr_name = "independent"
-        !call write_h5attr_bool(file_id, trim(adjustL(attr_name)), indep)
-
-        !INTEGERS
-        attr_name = "nb_procs"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nb_procs)
-        attr_name = "nDim"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), nDim)
-        attr_name = "Nmc"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), Nmc)
-        attr_name = "method"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), method)
-        attr_name = "seedStart"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), seedStart)
-        attr_name = "corrMod"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), corrMod)
-        attr_name = "margiFirst"
-        call write_h5attr_int(file_id, trim(adjustL(attr_name)), margiFirst)
-
-        !INTEGER VEC
-        !attr_name = "seed"
-        !call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), seed)
-        !attr_name = "kNStep"
-        !call write_h5attr_int_vec(file_id, attr_name, kNStep_out)
-        attr_name = "nFields"
-        call write_h5attr_int_vec(file_id, attr_name, nFields)
-        !attr_name = "sum_xNStep"
-        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_xNStep)
-        !attr_name = "sum_kNStep"
-        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_kNStep)
-
-        !DOUBLE VEC
-        attr_name = "xMinGlob"
-        call write_h5attr_real_vec(file_id, attr_name, xMinGlob)
-        attr_name = "xMaxGlob"
-        call write_h5attr_real_vec(file_id, attr_name, xMaxGlob)
-        attr_name = "xStep"
-        call write_h5attr_real_vec(file_id, attr_name, xStep)
-        !attr_name = "kMax"
-        !call write_h5attr_real_vec(file_id, attr_name, RDF%kMax)
-        attr_name = "corrL"
-        call write_h5attr_real_vec(file_id, attr_name, corrL)
-        attr_name = "overlap"
-        call write_h5attr_real_vec(file_id, attr_name, overlap)
-        !attr_name = "procExtent"
-        !call write_h5attr_real_vec(file_id, attr_name, procExtent)
-        !attr_name = "kMax_out"
-        !call write_h5attr_real_vec(file_id, attr_name, kMax_out)
-
-        if(.not. opened) then
-            call h5fclose_f(file_id, error)! Close the file.
-            call h5close_f(error) ! Close FORTRAN interface
-        end if
-
-    end subroutine write_HDF5_attributes
 end program main_ScaRL
