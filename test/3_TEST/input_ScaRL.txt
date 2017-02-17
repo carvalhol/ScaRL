@@ -1,8 +1,7 @@
-1               #Application: 1-ScaRL/2-SEM <int>
 "SAMPLES"       #Output Folder <string, in-between quotes>
-1               #Number of Samples <int>
+2               #Number of Samples <int>
 #--------------------------------
-"Sample_Test_1"      #Sample name <string, in-between quotes>
+"Sample_Test_1" #Sample name <string, in-between quotes>
 0d0 0d0 0d0     #Coodinate Min (X,Y,Z) <double>
 30d0 30d0 30d0  #Coordinate Max (X, Y, Z) <double>
 1d0 1d0 1d0     #Correlation Lenghts (X,Y,Z) <double>

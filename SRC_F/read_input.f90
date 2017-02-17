@@ -47,7 +47,6 @@ contains
             double precision, dimension (:,:), allocatable, intent(out) :: overlap
             integer, dimension(:,:), allocatable, intent(out) :: pointsPerCorrL
             !LOCAL
-            integer :: application
             character(len=1024) :: buffer
             integer :: fid
             integer :: s
@@ -71,9 +70,6 @@ contains
 
             open (unit = fid , file = file_path, action = 'read', status="old", form="formatted")
                 
-                buffer = getLine(fid, '#') !application
-                read(buffer,*) application
-                if(rank == 0) print*, "application = ", application
                
                 buffer = getLine(fid, '#') !output folder
                 read(buffer,*) output_folder
