@@ -25,10 +25,10 @@ program main_ScaRL
     integer, dimension(:,:), allocatable :: pointsPerCorrL
     
     !INPUTS HARD
-    integer :: pointsPerBlockMax = 20
+    integer(kind = 8) :: pointsPerBlockIdeal = 100*100*100
        
     !LOCAL VARIABLES
-    integer, dimension(3) :: Np
+    integer, dimension(3) :: Np, Np_temp
     integer :: comm_group
     integer, dimension(3) :: L
     integer, dimension(3) :: Np_ovlp, topo_shape, topo_pos
@@ -77,7 +77,7 @@ program main_ScaRL
      
     call verify_inputs(xMinGlob(:,s), xMaxGlob(:,s), corrL(:,s), & 
                        overlap(:,s), &
-                       pointsPerCorrL(:,s), pointsPerBlockMax)
+                       pointsPerCorrL(:,s), pointsPerBlockIdeal)
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
     L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
@@ -86,7 +86,7 @@ program main_ScaRL
 
     !Finding place in topology and defining the number of points per processor (Np)
     call decide_topo_shape(nb_procs, L, Np_ovlp, &
-                           pointsPerBlockMax, & 
+                           pointsPerBlockIdeal, & 
                            topo_shape)
     
     !Changing to keep only procs used in this topology
@@ -107,11 +107,18 @@ program main_ScaRL
             stop("ERROR!! Communicator ill-defined")
 
         Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
-        if(any(Np < 2*Np_ovlp)) then
+
+        !Condition to not overlap more than 8 overlap areas
+        Np_temp = Np
+        where(topo_shape == 2 .and. Np < Np_ovlp)   Np = Np_ovlp
+        where(topo_shape >= 3 .and. Np < 2*Np_ovlp) Np = 2*Np_ovlp
+        if(any(Np_temp /= Np)) then
             if(rank == 0) print *, "WARNING!! Overlap is too big for this domain"
             if(rank == 0) print *, "                  the domain will be expanded"
-            if(rank == 0) print *, "        (Consider using fewer procs next time)"
-            where (Np < 2*Np_ovlp) Np = 2*Np_ovlp
+            if(rank == 0) print *, "        (Consider using a smaller &&
+                                    overlap/domain size (ratio) or fewer procs)"
+            if(rank == 0) print *, "BEFORE: Np = ",  Np_temp, "Np_ovlp = ", Np_ovlp
+            if(rank == 0) print *, "AFTER: Np = ",  Np, "Np_ovlp = ", Np_ovlp
         end if
 
         L = Np*topo_shape - ((topo_shape-1)*Np_ovlp)
@@ -120,6 +127,7 @@ program main_ScaRL
         if(rank == 0) print *, "L          =", L
         if(rank == 0) print *, "Np         =", Np
         if(rank == 0) print *, "Np_ovlp    =", Np_ovlp
+        if(rank == 0) print *, "product(Np)=", product(Np)
         if(rank == 0) print *, "xStep      =", xStep
 
         call get_topo_pos(rank, topo_shape, topo_pos)
@@ -202,14 +210,14 @@ program main_ScaRL
         !---------------------------------------------------------------------------------
         subroutine verify_inputs(xMinGlob, xMaxGlob, corrL, &
                                  overlap, & 
-                                 pointsPerCorrL, pointsPerBlockMax)
+                                 pointsPerCorrL, pointsPerBlockIdeal)
         
         double precision, dimension (3), intent(in) :: xMinGlob
         double precision, dimension (3), intent(in) :: xMaxGlob
         double precision, dimension (3), intent(in) :: corrL
         double precision, dimension (3), intent(in) :: overlap
         integer, dimension(3), intent(in) :: pointsPerCorrL
-        integer, intent(in) :: pointsPerBlockMax
+        integer(kind=8), intent(in) :: pointsPerBlockIdeal
 
         if(any(xMinGlob >= xMaxGlob)) then
             print*, "xMinGlob = ", xMinGlob
@@ -217,14 +225,14 @@ program main_ScaRL
             stop("ERROR: xMinGlob >= xMaxGlob")
         end if 
 
-        if(any(corrL < 0)) then
+        if(any(corrL < 0d0)) then
             print*, "corrL = ", corrL
-            stop("ERROR: corrL < 0")
+            stop("ERROR: corrL < 0d0")
         end if 
         
-        if(any(overlap < 0)) then
+        if(any(overlap < 0d0)) then
             print*, "overlap = ", corrL
-            print*, "WARNING: overlap < 0, the mesh will be discontinuous"
+            print*, "WARNING: overlap < 0d0, the mesh will be discontinuous"
         end if 
         
         if(any(pointsPerCorrL < 2)) then
@@ -232,9 +240,9 @@ program main_ScaRL
             stop("ERROR: PointsPerCorrL < 2")
         end if 
         
-        if(pointsPerBlockMax < 2) then
-            print*, "pointsPerBlockMax = ", pointsPerBlockMax
-            stop("ERROR: pointsPerBlockMax < 2")
+        if(pointsPerBlockIdeal < 8) then
+            print*, "pointsPerBlockIdeal = ", pointsPerBlockIdeal
+            stop("ERROR: pointsPerBlockIdeal < 8")
         end if 
         
         end subroutine verify_inputs
@@ -456,14 +464,14 @@ program main_ScaRL
         !-----------------------------------------------------------
         !-----------------------------------------------------------
         subroutine decide_topo_shape(nb_procs, L, nPointsOvlp, &
-                                     pointsPerBlockMax, & 
+                                     pointsPerBlockIdeal, & 
                                      topo_shape)
 
             implicit none
             !INPUT
             integer, intent(in) :: nb_procs
             integer, dimension(3), intent(in) :: L, nPointsOvlp
-            integer, intent(in) :: pointsPerBlockMax
+            integer(kind = 8), intent(in) :: pointsPerBlockIdeal
 
             !OUTPUT
             integer, dimension(3), intent(out) :: topo_shape
@@ -471,7 +479,8 @@ program main_ScaRL
             integer, dimension(3) :: nPoints, nBlocks
             integer, dimension(3) :: nFieldsIdeal, nBlocksIdeal
             integer, dimension(3) :: nFieldsChosen
-            integer, dimension(3) :: nPointsBase, ratio
+            integer, dimension(3) :: nPointsBase, nPointsPerProc, ratio
+            integer(kind = 8) :: nTotalPointsProc
             logical :: nFieldsOK
             integer, dimension(100) :: factors
             integer :: i, pos, np, np_total, np_start, np_end
@@ -480,16 +489,23 @@ program main_ScaRL
             nPointsBase = L
             nBlocks = 1
             nFieldsOK = .false.
-
             do while (.not. nFieldsOK)
+            
                 nPoints = nPointsBase + (nBlocks - 1)*nPointsOvlp
+                nPointsPerProc = ceiling(dble(nPoints)/dble(nBlocks))
+                nTotalPointsProc = product(int(nPointsPerProc,8))
+                if(nTotalPointsProc <= pointsPerBlockIdeal) then
+                    nFieldsOK = .true.
+                else
+                    pos = maxloc(nPointsPerProc, 1)
+                    nBlocks(pos) = nBlocks(pos) + 1
+                    if(product(nBlocks) > nb_procs) nFieldsOK = .true. 
+                end if
+
                 !print*, "nPoints = ", nPoints
+                !print*, "nPointsPerProc = ", nPointsPerProc
                 !print*, "nBlocks = ", nBlocks
-                where(nPoints/nBlocks > pointsPerBlockMax) & 
-                                                   nBlocks = nBlocks + 1
-                ratio = ceiling(dble(nPoints)/dble(nBlocks))
-                if(all(ratio < pointsPerBlockMax)) nFieldsOK = .true.
-                if(product(nBlocks) > nb_procs) nFieldsOK = .true. 
+            
             end do
 
             nBlocksIdeal = nBlocks

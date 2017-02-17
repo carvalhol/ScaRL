@@ -24,16 +24,27 @@ SRCS = $(wildcard *.f90 *.f)
 ScaRL_OBJ += ./main_ScaRL.o \
                write_output.o \
                str_functions.o \
-               hdf5_ScaRL.o
+               hdf5_ScaRL.o \
+               fftw_ScaRL.o \
+               constants_ScaRL.o \
+               normal_ScaRL.o \
+               read_input.o
 LIBS = $(LIBHDF5) $(LIBMPI) $(LIBFFTW)
 INCLUDE = $(INCLUDEHDF5) $(INCLUDEMPI) $(INCLUDEFFTW)
 
 #Dependencies
 #main_ScaRL.o   : constants_ScaRL.o
 main_ScaRL.o   : write_output.o \
-                 str_functions.o
+                 str_functions.o \
+                 fftw_ScaRL.o \
+                 constants_ScaRL.o \
+                 read_input.o
 write_output.o : str_functions.o \
-                 hdf5_ScaRL.o
+                 hdf5_ScaRL.o \
+                 constants_ScaRL.o
+read_input.o   : str_functions.o
+fftw_ScaRL.o   : constants_ScaRL.o \
+                 normal_ScaRL.o
 
 # Making all the ".o" from the ".f90"
 %.o: ../SRC_F/%.f90
