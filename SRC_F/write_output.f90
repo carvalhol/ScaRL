@@ -239,12 +239,10 @@ contains
         call h5close_f(error) ! Close FORTRAN interface
 
         !Writing XMF for each part
-        if(.false.) then
         call write_XMF_elements(HDF5_name,           &
                                 xMin, xMax, shape(randField_3D), &
-                                XMF_name, ".", &
+                                XMF_name, res_folder, &
                                 ".", ds_name)
-        end if
 
     end subroutine write_hdf5_single_proc_3D
 
@@ -293,7 +291,7 @@ contains
         character(len=1024) :: ds_name
         character(len=1024) :: HDF5_temp
         double precision, dimension(:,:,:), allocatable :: randField_3D_temp
-        double precision, dimension(3) :: xMin_temp, xMax_temp
+        double precision, dimension(3) :: xMax_temp
         integer :: i
         integer, dimension(MPI_STATUS_SIZE) :: statut
         integer :: cont = 0
@@ -322,6 +320,7 @@ contains
         local_size = Np
         ds_name = "samples"
         HDF5_path = str_cat(res_folder,"/",HDF5_name)
+        xMax_temp = xMax
         if(rank == 0) print*, "HDF5_path =", trim(HDF5_path)
 
         !HDF5 WRITING
@@ -377,7 +376,7 @@ contains
         call h5fclose_f(file_id, error) !CLOSE file_id
         call h5close_f(error) ! Close FORTRAN interface
 
-        call write_XMF_elements(HDF5_name,           &
+        if(rank == 0) call write_XMF_elements(HDF5_name,           &
                                 xMin, xMax_temp, L, &
                                 XMF_name, res_folder, &
                                 ".", ds_name)
@@ -416,7 +415,11 @@ contains
         print*, "XMF_folder = ", trim(XMF_folder)
         print*, "HDF5_name = ", trim(HDF5_name)
         print*, "H5_TO_XMF_path = ", trim(H5_TO_XMF_path)
-        xStep = (xMax-xMin)/(xNStep-1)
+        xStep = (xMax-xMin)/dble(xNStep-1)
+        print*, "xMax = ", xMax 
+        print*, "xMin = ", xMin
+        print*, "xNStep = ", xNStep 
+        print*, "xStep = ", xStep 
 
         !Writing Number of points in each Dimensions in the reverse order
         dimText = ""
