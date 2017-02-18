@@ -375,7 +375,8 @@ program main_ScaRL
                                    xRange, corrL, corrMod, seedStart)
 
             if(rank == 0) print*, "normalize_field " 
-            call normalize_field(k_mtx)
+            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+                                 rank, comm_group, k_mtx)
             
             if(rank == 0) print*, "apply_UnityPartition " 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
@@ -594,23 +595,41 @@ program main_ScaRL
         !-----------------------------------------------------------
         !-----------------------------------------------------------
         !-----------------------------------------------------------
-        subroutine normalize_field(randField)
+        subroutine normalize_field(topo_pos, topo_shape, Np,  Np_ovlp, &
+                                   rank, comm_group, randField)
         implicit none
+        !INPUT
+        integer, dimension(3), intent(in) :: topo_pos, topo_shape, Np, Np_ovlp
+        integer, intent(in) :: rank, comm_group
         !INPUT OUTPUT 
         double precision, dimension(:,:,:), intent(inout) :: randField
         !LOCAL
         double precision :: avg, std_dev
+        integer, dimension(3) :: maxPos
+        double precision :: sumRF, sumRFsquare
+        double precision :: totalSumRF, totalSumRFsquare
+        integer(kind = 8) :: xNTotal
+        integer :: code
 
-        avg = sum(randField)/dble(size(randField))
-        !print*, "avg BEFORE = ", avg
+        maxPos = Np
+        where(topo_pos /= (topo_shape-1)) maxPos = Np - Np_ovlp
+        xNTotal = product((topo_shape*Np) + ((topo_shape-1)*Np_ovlp))
+
+        !AVERAGE
+        sumRF = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))) 
+        call MPI_ALLREDUCE (sumRF,totalSumRF,1,MPI_DOUBLE_PRECISION, &
+                            MPI_SUM,comm_group,code)
+        avg = sumRF/dble(xNTotal)
+        if(rank==0) print*, "avg BEFORE = ", avg
         randField = randField - avg
-        avg = sum(randField)/dble(size(randField))
-        !print*, "avg AFTER = ", avg
-        std_dev = sqrt(sum(randField**2d0)/dble(size(randField)))
-        !print*, "std_dev BEFORE = ", std_dev
+
+        !VARIANCE
+        sumRFsquare = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))**2d0)
+        call MPI_ALLREDUCE (sumRFsquare,totalSumRFsquare,1,MPI_DOUBLE_PRECISION, &
+                            MPI_SUM,comm_group,code)
+        std_dev = sqrt(sumRFsquare/dble(xNTotal))
+        if(rank==0) print*, "std_dev BEFORE = ", std_dev
         randField = randField/std_dev
-        std_dev = sqrt(sum(randField**2d0)/dble(size(randField)))
-        !print*, "std_dev AFTER = ", std_dev
                 
         end subroutine normalize_field
 
