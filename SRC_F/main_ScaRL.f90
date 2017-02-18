@@ -374,10 +374,6 @@ program main_ScaRL
             call gen_std_gauss_FFT(k_mtx, Np, &
                                    xRange, corrL, corrMod, seedStart)
 
-            if(rank == 0) print*, "normalize_field " 
-            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
-                                 rank, comm_group, k_mtx)
-            
             if(rank == 0) print*, "apply_UnityPartition " 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                           partition_type, &
@@ -388,9 +384,15 @@ program main_ScaRL
             call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
+            
+            if(rank == 0) print*, "normalize_field " 
+            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+                                 rank, comm_group, k_mtx)
+            
             if(rank == 0) print*, "multivariateTransformation " 
             call multiVariateTransformation(avg, std_dev, margiFirst, &
                                             k_mtx)
+            
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
@@ -613,7 +615,8 @@ program main_ScaRL
 
         maxPos = Np
         where(topo_pos /= (topo_shape-1)) maxPos = Np - Np_ovlp
-        xNTotal = product((topo_shape*Np) + ((topo_shape-1)*Np_ovlp))
+        xNTotal = product((topo_shape*(Np-Np_ovlp)) +Np_ovlp)
+        print*, "xNTotal = ", xNTotal
 
         !AVERAGE
         sumRF = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))) 
