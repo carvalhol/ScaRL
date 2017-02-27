@@ -371,7 +371,9 @@ program main_ScaRL
             !print*, "Proc = ", rank, "seedStart = ", seedStart
             
             if(rank == 0) print*, "gen_std_gauss_FFT " 
-            call gen_std_gauss_FFT(k_mtx, Np, &
+            !call gen_std_gauss_FFT(k_mtx, Np, &
+            !                       xRange, corrL, corrMod, seedStart)
+            call gen_std_gauss_Shino_FFT(k_mtx, Np, &
                                    xRange, corrL, corrMod, seedStart)
 
             if(rank == 0) print*, "apply_UnityPartition " 
