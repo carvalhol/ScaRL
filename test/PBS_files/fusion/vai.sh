@@ -6,8 +6,8 @@ NP=$(($N_SELECT*$N_CPU))
 Delete_Results=1
 Open_Output=0
 
-Build_Path="/home/carvalhol/Projects/ScaRL/build"
-Queue="iceq"
+Build_Path="/home/carvalhol/ScaRL/build"
+Queue="haswellq"
 Mail="lucianopaludoecp@gmail.com"
 User="carvalhol"
 W_TIME="01:00:00"
@@ -16,6 +16,7 @@ list_Name="Test3"
 output_Name="out_run.txt"
 mem="20000mb"
 time_to_find="20"
+project_name="omaha"
 
 arg=$1 
 
@@ -70,6 +71,7 @@ if [ "$Run" -eq "1" ]; then
     -l walltime=$W_TIME \
     -l select=$N_SELECT:ncpus=$N_CPU:mpiprocs=$N_CPU:mem=$mem \
     -q $Queue \
+    -P $project_name \
     -M $Mail \
     $PBS_Name
     qstat -u $User

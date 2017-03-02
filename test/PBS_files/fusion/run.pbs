@@ -1,0 +1,25 @@
+#!/bin/bash
+
+
+# chargement des modules
+#chargement des modules
+module purge
+module load intel-compilers/16.0.3
+module load intel-mkl/11.3.3
+module load intel-mpi/5.1.2
+module load phdf5/1.8.17-IntelMPI
+module load fftw/3.3.4 
+
+#export LD_LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64
+#export LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64
+
+# On se place dans le repertoire depuis lequel le job a ete soumis
+cd $PBS_O_WORKDIR
+
+cat $PBS_NODEFILE | uniq > mpd.hosts
+nb_nodes=`cat mpd.hosts|wc -l`
+
+if [ "$Run" -eq "1" ]; then
+    echo "Running ScaRL"
+    mpirun -np $NP /home/carvalhol/ScaRL/build/ScaRL.exe
+fi
