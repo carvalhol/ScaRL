@@ -23,7 +23,7 @@ contains
         !--------------------------------------------------------------
         !--------------------------------------------------------------
         !--------------------------------------------------------------
-        subroutine read_input_ScaRL(file_path, rank, &
+        subroutine read_input_ScaRL(file_path_in, rank, &
                                     nSamples, output_folder, &
                                     xMinGlob, xMaxGlob, &
                                     corrL, corrMod, margiFirst, &
@@ -33,7 +33,7 @@ contains
                                     pointsPerCorrL, comm_group)
             implicit none
             !INPUT
-            character(len=*), intent(in) :: file_path
+            character(len=*), intent(in) :: file_path_in
             integer, intent(in) :: rank
             !OUTPUT
             integer, intent(out) :: nSamples
@@ -49,12 +49,16 @@ contains
             integer, dimension(:,:), allocatable, intent(out) :: pointsPerCorrL
             integer, intent(in) :: comm_group
             !LOCAL
-            character(len=1024) :: buffer
+            character(len=1024) :: buffer,cur_folder,file_path
             integer :: fid
             integer :: s, error, code
 
         if(rank == 0) then
-            if(fileExist("./random.spec")) then
+            call getcwd(cur_folder)
+            print*, "Working on directory: ", trim(adjustL(cur_folder))
+            file_path = str_cat(cur_folder,"/random.spec")
+
+            if(fileExist(file_path)) then
 
                 if(rank == 0) print*, "WARNING: 'random.spec' found, generating files for SEM"   
                 if(.not. fileExist("./domains.txt")) then
@@ -70,9 +74,15 @@ contains
                                     avg, std_dev, overlap, &
                                     pointsPerCorrL)
             else
+                file_path = str_cat(cur_folder,"/",file_path_in)
 
                 if(rank == 0) print*, "READING INPUT FROM ", trim(adjustL(file_path))   
 
+                if(.not. fileExist(file_path)) then
+                    print*, "'input_Scarl.txt' NOT FOUND"
+                    call MPI_ABORT(comm_group, error, code)
+                end if
+                
                 open (unit = fid , file = file_path, action = 'read', status="old", form="formatted")
                     
                    
