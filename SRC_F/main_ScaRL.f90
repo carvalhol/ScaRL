@@ -374,7 +374,9 @@ program main_ScaRL
             !call gen_std_gauss_FFT(k_mtx, Np, &
             !                       xRange, corrL, corrMod, seedStart)
             call gen_std_gauss_Shino_FFT(k_mtx, Np, &
-                                   xRange, corrL, corrMod, seedStart)
+                                   xRange, corrL, &
+                                   pointsPerCorrL, corrMod, &
+                                   seedStart, rank)
 
             if(rank == 0) print*, "apply_UnityPartition " 
             call apply_UnityPartition_mtx(Np, Np_ovlp,&
@@ -387,13 +389,13 @@ program main_ScaRL
                            nb_procs, topo_pos, topo_shape, &
                            comm_group)
             
-            if(rank == 0) print*, "normalize_field " 
-            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
-                                 rank, comm_group, k_mtx)
+            !if(rank == 0) print*, "normalize_field " 
+            !call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+            !                     rank, comm_group, k_mtx)
             
-            if(rank == 0) print*, "multivariateTransformation " 
-            call multiVariateTransformation(avg, std_dev, margiFirst, &
-                                            k_mtx)
+            !if(rank == 0) print*, "multivariateTransformation " 
+            !call multiVariateTransformation(avg, std_dev, margiFirst, &
+            !                                k_mtx)
             
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)

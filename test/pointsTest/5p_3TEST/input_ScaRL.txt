@@ -1,13 +1,13 @@
-"SAMPLES"       #Output Folder <string, in-between quotes>
+"5p_SAMPLES"       #Output Folder <string, in-between quotes>
 1               #Number of Samples <int>
 #--------------------------------
-"Sample_Test_1" #Sample name <string, in-between quotes>
+"5p_Sample_Test" #Sample name <string, in-between quotes>
 0d0 0d0 0d0     #Coodinate Min (X,Y,Z) <double>
 10d0 10d0 10d0   #Coordinate Max (X, Y, Z) <double>
 1d0 1d0 1d0     #Correlation Lenghts (X,Y,Z) <double>
 5d0 5d0 5d0     #Overlap (in correlation lengths) (X,Y,Z) <double>
-#5 5 5           #Points per Correlation Length (X,Y,Z) <integer>
-10 10 10        #Points per Correlation Length (X,Y,Z) <integer>
+5 5 5           #Points per Correlation Length (X,Y,Z) <integer>
+#10 10 10        #Points per Correlation Length (X,Y,Z) <integer>
 1               #Correlation Model: 1-Gaussian <int>
 2               #First-order marginal density: 1-Gaussian/2-Lognormal <int>
 1d0             #Average <double>
