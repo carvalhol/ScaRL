@@ -61,11 +61,12 @@ contains
             if(fileExist(file_path)) then
 
                 if(rank == 0) print*, "WARNING: 'random.spec' found, generating files for SEM"   
-                if(.not. fileExist("./domains.txt")) then
+                file_path = str_cat(cur_folder,"/domains.txt")
+                if(.not. fileExist(file_path)) then
                     print*, "'domains.txt'NOT FOUND (Did you run the mesher?"
                     call MPI_ABORT(comm_group, error, code)
                 end if
-                call read_input_SEM(rank, &
+                call read_input_SEM(cur_folder, rank, &
                                     nSamples, output_folder, &
                                     xMinGlob, xMaxGlob, &
                                     corrL, corrMod, margiFirst, &
@@ -83,8 +84,12 @@ contains
                     call MPI_ABORT(comm_group, error, code)
                 end if
                 
-                open (unit = fid , file = file_path, action = 'read', status="old", form="formatted")
-                    
+                    print*, "BEFORE"
+                fid = 50 
+                open (unit = fid , file = file_path, action = 'read', iostat=error)
+                !open (unit = fid , file = "./input_ScaRL.txt", action = 'read', iostat=error)
+                   
+                    print*, "error = ", error 
                    
                     buffer = getLine(fid, '#') !output folder
                     read(buffer,*) output_folder
@@ -198,7 +203,7 @@ contains
         !--------------------------------------------------------------
         !--------------------------------------------------------------
         !--------------------------------------------------------------
-        subroutine read_input_SEM( rank, &
+        subroutine read_input_SEM( cur_folder, rank, &
                                    nSamples, output_folder, &
                                    xMinGlob, xMaxGlob, &
                                    corrL, corrMod, margiFirst, &
@@ -208,6 +213,7 @@ contains
                                    pointsPerCorrL)
             implicit none
             !INPUT
+            character(len=*) :: cur_folder
             integer, intent(in) :: rank
             !OUTPUT
             integer, intent(out) :: nSamples
@@ -242,7 +248,7 @@ contains
             fid_2 = 19
 
             if(rank == 0) print*, "READING random.spec"
-            open (unit = fid_2 , file = "./random.spec", action = 'read', status="old", form="formatted")
+            open (unit = fid_2 , file = trim(adjustL(cur_folder))//"/random.spec", action = 'read', status="old", form="formatted")
 
                 !!1)  Counting number of samples to be generated
                 mat = -1
@@ -314,7 +320,7 @@ contains
             allocate(bbox_min(0:2,0:nMat-1))
             allocate(bbox_max(0:2,0:nMat-1))
             
-            open (unit = fid_2 , file = "./domains.txt", action = 'read', status="old", form="formatted")
+            open (unit = fid_2 , file = trim(adjustL(cur_folder))//"domains.txt", action = 'read', status="old", form="formatted")
                 
                 buffer = getLine(fid_2, '#')
                 
@@ -426,17 +432,10 @@ contains
         character(len = *), intent(in) :: filePath
         !OUTPUT
         logical :: fileExists
-        !LOCAL
-        integer :: fileId=56, error
 
-        fileExists = .false.
-        open (unit = fileId , file = filePath, action = 'read', iostat=error)
-        !write(*,*) "error = ", error
-        if(error==0) then
-            close(fileId)
-            fileExists = .true.
-        end if
-
+        inquire(file=filePath, exist=fileExists)
+        print*, "file : ", trim(adjustL(filePath))
+        print*, "exists?", fileExists
 
     end function fileExist
 end module read_input
