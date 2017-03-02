@@ -320,7 +320,7 @@ contains
             allocate(bbox_min(0:2,0:nMat-1))
             allocate(bbox_max(0:2,0:nMat-1))
             
-            open (unit = fid_2 , file = trim(adjustL(cur_folder))//"domains.txt", action = 'read', status="old", form="formatted")
+            open (unit = fid_2 , file = trim(adjustL(cur_folder))//"/domains.txt", action = 'read', status="old", form="formatted")
                 
                 buffer = getLine(fid_2, '#')
                 
