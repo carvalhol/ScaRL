@@ -378,16 +378,16 @@ program main_ScaRL
                                    pointsPerCorrL, corrMod, &
                                    seedStart, rank)
 
-            if(rank == 0) print*, "apply_UnityPartition " 
-            call apply_UnityPartition_mtx(Np, Np_ovlp,&
-                                          partition_type, &
-                                          topo_pos, topo_shape, &
-                                          k_mtx)
-            
-            if(rank == 0) print*, "add_overlap " 
-            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
-                           nb_procs, topo_pos, topo_shape, &
-                           comm_group)
+            !if(rank == 0) print*, "apply_UnityPartition " 
+            !call apply_UnityPartition_mtx(Np, Np_ovlp,&
+            !                              partition_type, &
+            !                              topo_pos, topo_shape, &
+            !                              k_mtx)
+            !
+            !if(rank == 0) print*, "add_overlap " 
+            !call add_overlap(k_mtx, Np, Np_ovlp, rank, &
+            !               nb_procs, topo_pos, topo_shape, &
+            !               comm_group)
             
             !if(rank == 0) print*, "normalize_field " 
             !call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &

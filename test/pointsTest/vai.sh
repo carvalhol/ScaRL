@@ -3,6 +3,7 @@
 root_folder="."
 src_dir="/workdir/carvalhol/SEM_Test/eurodyn2017/SRC_lcp" #Only important when copying pbs files
 #src_dir="/workdir/carvalhol/SEM_Test/eurodyn2017/SRC_pipo" #Only important when copying pbs files
+build_dir="/home/carvalhol/Projects/ScaRL/build"
 
 arg=$1
 echo "Argument: " $arg
@@ -10,7 +11,8 @@ echo "Argument: " $arg
 if [[ -n "$arg"  ]]; then
     echo "I've got an argument :-)"
 else
-    echo "No argument (it should be list/clean/copy/prep/mvmesh/gen/run/cleanRun), the syntax is: './vai.sh argument'"
+    echo "No argument (it should be list/clean/copy/prep/mvmesh/gen/run/cleanRun/build), i'll use build: './vai.sh argument'"
+    arg="build"
 fi
 
 
@@ -49,6 +51,9 @@ elif [[ "$arg" == "clean" ]]; then
     echo "Cleaning folders"
 elif [[ "$arg" == "mvmesh" ]]; then
     echo "Moving meshes to ./sem folder"
+elif [[ "$arg" == "build" ]]; then
+    echo "Building"
+    (cd $build_dir; make all)
 else
     echo "Argument: $arg undentified (it should be list/clean/copy/prep/mvmesh/gen/run/cleanRun)"
 fi
@@ -67,7 +72,7 @@ elif [[ "$arg" == "clean" ]]; then
     (cd $folder; rm -r SAMPLES out_*)
 elif [[ "$arg" == "copy" ]]; then
     cp $src_dir/prepro.pbs $src_dir/run.pbs $src_dir/mesh.input $folder/
-else
+elif [[ "$arg" == "run" ]]; then
     (cd /home/carvalhol/Projects/ScaRL/build; make all)
     (cd $folder; rm -r *SAMPLES out_*)
     (cd $folder; ./vai.sh $arg)
