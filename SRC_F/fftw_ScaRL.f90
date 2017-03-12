@@ -33,16 +33,15 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     integer(kind=8) :: plan
     double precision, dimension(:,:,:), allocatable :: Sk_mtx!, gammaK
     double precision, dimension(:,:,:), allocatable :: r_phase
-    double complex, dimension(:,:,:), allocatable :: phiK
     double precision :: ampMult
     double precision, dimension(3) :: delta_k, delta_exp, xRange
     integer :: ii, jj, kk
     double complex, dimension(:,:,:), allocatable :: c_in
     double complex, dimension(:,:,:), allocatable :: c_out
-    double precision, dimension(3) :: k_max, delta_x
-    double precision :: k_cut
+    double precision, dimension(3) :: k_max, delta_x, k_cut
     integer, dimension(3) :: sz_c, sz_Sk
     integer :: p_x, p_y, p_z
+    double complex :: spec_val
 
     integer ( kind = 4 ), parameter :: SS = 10
     real ( kind = 8 ), dimension(2,5) :: r
@@ -65,57 +64,53 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
         
         k_max = 1/delta_x
         delta_k = k_max/dble(sz_c/2)
+        if(any(k_max < k_cut)) then
+            print*, "WARNING!! k_max = ", k_max, "< k_cut = ", k_cut
+            print*, "Your mesh is too coarse to this representation, truncating k_cut (it may generate an ill-represented field)"
+            where(k_max > k_cut) k_cut = k_max
+            print*, "New k_cut = ", k_cut
+        end if
         sz_Sk = ceiling(k_cut/delta_k)
-        !sz_Sk = Np
-        !delta_k = 1d0/dble(sz_c/2)
-        !delta_k = 1/(xRange*dble(sz_c)/dble(Np))
-        !delta_k = k_max/dble(Np)
-        !delta_k = 2*PI/xRange
-        !if(any(delta_k >  2*PI/xRange)) then
-        !    if(rank==0) print*, "WARNING! delta_k is too big for Gaussian correlation model (mesh to coarse)"
-        !    if(rank==0) print*, "delta_k max indicated = ", 2*PI/xRange, "| current delta_k = ", delta_k
-        !end if
-        !if(any(sz_Sk > Np)) then
-        !    print*, "WARNING!! sz_Sk = ", sz_Sk, "> Np = ", Np
-        !    where(sz_Sk > Np) sz_Sk = Np
-        !    !stop("sz_Sk > Np")
-        !end if
+    
+        !Random phase
+        allocate(r_phase(sz_Sk(1),sz_Sk(2)*2,sz_Sk(3)*2))
+        allocate(Sk_mtx(sz_Sk(1),sz_Sk(2)*2,sz_Sk(3)*2))
+        call r8vec_uniform_01 ( size(r_phase), seed+1000000, r_phase)
+        r_phase = 2d0*PI*r_phase
+        Sk_mtx = cmplx(cos(r_phase),sin(r_phase))
+        deallocate(r_phase)
         
         if(rank==0) print*, "delta_x = ", delta_x
         if(rank==0) print*, "k_max   = ", k_max
         if(rank==0) print*, "delta_k = ", delta_k
         if(rank==0) print*, "sz_Sk = ", sz_Sk
         
-        !delta_exp(:) = ((delta_k**2d0) * (corrL**2d0))/(4d0*PI)
         delta_exp(:) = ((PI**2d0)/2d0)*((delta_k**2d0))/(corrL**2.0d0)
         if(rank==0) print*, "delta_exp = ", delta_exp
-        allocate(Sk_mtx(sz_Sk(1),sz_Sk(2),sz_Sk(3)))
-        Sk_mtx = 0d0
+        Sk_mtx(1,:,:)=0d0
+        Sk_mtx(:,1,:)=0d0
+        Sk_mtx(:,:,1)=0d0
+        
+        Sk_mtx(:,sz_Sk(2)*2,:)=0d0
+        Sk_mtx(:,:,sz_Sk(3)*2)=0d0
         
         do ii = 2, sz_Sk(1)
             do jj = 2, sz_Sk(2)
                 do kk = 2, sz_Sk(3)
-                    Sk_mtx(ii,jj,kk) = exp(-(sum((dble([ii,jj,kk]-1)**2d0)*delta_exp(:))))
+                    spec_val = sqrt(exp(-(sum((dble([ii,jj,kk]-1)**2d0)*delta_exp(:)))))
+                    Sk_mtx(ii,jj,kk) = Sk_mtx(ii,jj,kk)*spec_val !+++
+                    Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,kk) = Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,kk)*spec_val !+-+
+                    Sk_mtx(ii,jj,(sz_Sk(3)*2)-kk+1) = Sk_mtx(ii,jj,(sz_Sk(3)*2)-kk+1)*spec_val !++-
+                    Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,(sz_Sk(3)*2)-kk+1) = Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,(sz_Sk(3)*2)-kk+1)*spec_val !+--
                 end do
             end do
         end do
         if(rank==0) print *, "Sk_mtx = ", Sk_mtx(2,2,:)
-        Sk_mtx = 8d0*product(corrL)*Sk_mtx !From the spectra definition
-        Sk_mtx = 2d0*sqrt(product(delta_k)*Sk_mtx) !Shinozuka formula
-        !Sk_mtx = 2d0*sqrt(product(delta_k)/((2d0*PI)**3d0))*Sk_mtx
-        !Sk_mtx = 2d0*product(corrL)*sqrt(product(delta_k)/((2*PI)**3d0))*Sk_mtx
+        Sk_mtx = sqrt(8d0*product(corrL))*Sk_mtx !From the spectra definition
+        Sk_mtx = 2d0*sqrt(product(delta_k))*Sk_mtx !Shinozuka formula
     end select
      !Sk_mtx = Sk_mtx/sqrt(dble(product(sz_c))) !FFT normalization
-    !Ps: Sk_mtx supposed symmetric
-    !(Sk_mtx(ii,jj,kk) == Sk_mtx(ii,-jj,kk) == Sk_mtx(ii,jj,-kk) == Sk_mtx(ii,-jj,-kk) 
     
-    !Random phase
-    allocate(r_phase(sz_Sk(1),sz_Sk(2)*2,sz_Sk(3)*2))
-    allocate(phiK(sz_Sk(1),sz_Sk(2)*2,sz_Sk(3)*2))
-    call r8vec_uniform_01 ( size(r_phase), seed+1000000, r_phase)
-    r_phase = 2d0*PI*r_phase
-    phiK = cmplx(cos(r_phase),sin(r_phase))
-    deallocate(r_phase)
 
     !Computing data
     data_real_3D = 0d0
@@ -132,23 +127,21 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     !Quadrant(+++)
     c_in(1:sz_Sk(1),&
          1:sz_Sk(2),&
-         1:sz_Sk(3)) = Sk_mtx *&
-                       phiK(:,1:sz_Sk(2),1:sz_Sk(3))
+         1:sz_Sk(3)) = Sk_mtx(:,1:sz_Sk(2),1:sz_Sk(3))
     !Quadrant(+-+)
     c_in(1:sz_Sk(1), &
          sz_c(2)-sz_Sk(2)+1:sz_c(2), &
-         1:sz_Sk(3)) = Sk_mtx(:,sz_Sk(2):1:-1,:) *&
-                       phiK(:,sz_Sk(2)+1:,1:sz_Sk(3))
+         1:sz_Sk(3)) = Sk_mtx(:,sz_Sk(2)+1:,1:sz_Sk(3))
     !Quadrant(++-)
     c_in(1:sz_Sk(1), &
          1:sz_Sk(2), &
-         sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,:,sz_Sk(3):1:-1) *&
-                                       phiK(:,1:sz_Sk(2), sz_Sk(3)+1:)
+         sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,1:sz_Sk(2), sz_Sk(3)+1:)
     !Quadrant(+--)
     c_in(1:sz_Sk(1), &
          sz_c(2)-sz_Sk(2)+1:sz_c(2), &
-         sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,sz_Sk(2):1:-1,sz_Sk(3):1:-1) *&
-                                       phiK(:,sz_Sk(2)+1:,sz_Sk(3)+1:)
+         sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,sz_Sk(2)+1:,sz_Sk(3)+1:)
+   
+    if(allocated(Sk_mtx)) deallocate(Sk_mtx)
 
     if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
     if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
@@ -162,74 +155,6 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     if(rank == 0) print*, "maxval(data_real_3D) +-- = ", maxval(data_real_3D) 
     if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
 
-    
-    !!Quadrant (+ + +)
-    !c_in = 0d0
-    !print*, "phiK(1,1,1) = ", phiK(1,1,1)
-    !c_in(1:sz_Sk(1),1:sz_Sk(2),1:sz_Sk(3)) = Sk_mtx*&
-    !                                         phiK(:,1:sz_Sk(2),1:sz_Sk(3))
-    !call dfftw_plan_dft_3d(plan, L,M,N, c_in,c_out,FFTW_BACKWARD, FFTW_ESTIMATE)
-    !call dfftw_execute_dft(plan, c_in, c_out)
-    !call dfftw_destroy_plan(plan)
-    !data_real_3D = data_real_3D + real(c_out(1:Np(1),1:Np(2),1:Np(3)))
-
-    !if(rank == 0) print*, "maxval(data_real_3D) +++ = ", maxval(data_real_3D) 
-    !if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
-
-    !!Quadrant (+ - +)
-    !c_in = 0d0
-    !print*, "phiK(1,1,1,2) = ", phiK(1,sz_Sk(2)+1,1)
-    !c_in(1:sz_Sk(1), &
-    !     sz_c(2)-sz_Sk(2)+1:sz_c(2), &
-    !     1:sz_Sk(3)) = Sk_mtx(:,sz_Sk(2):1:-1,:)*&
-    !                   phiK(:,sz_Sk(2)+1:,1:sz_Sk(3))
-    !call dfftw_plan_dft_3d(plan, L,M,N, c_in,c_out,FFTW_BACKWARD, FFTW_ESTIMATE)
-    !call dfftw_execute_dft(plan, c_in, c_out)
-    !call dfftw_destroy_plan(plan)
-    !data_real_3D = data_real_3D + real(c_out(1:Np(1),1:Np(2),1:Np(3)))
-
-
-    !if(rank == 0) print*, "maxval(data_real_3D) +-+ = ", maxval(data_real_3D) 
-    !if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
-
-
-    !!Quadrant (+ + -)
-    !c_in = 0d0
-    !print*, "phiK(1,1,1,3) = ", phiK(1,1,sz_Sk(3)+1)
-    !c_in(1:Np(1), &
-    !     1:Np(2), &
-    !     sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,:,sz_Sk(3):1:-1)*&
-    !                                           phiK(:,1:sz_Sk(2), sz_Sk(3)+1:)
-    !if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
-    !if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
-    !call dfftw_plan_dft_3d(plan, L,M,N, c_in,c_out,FFTW_BACKWARD, FFTW_ESTIMATE)
-    !call dfftw_execute_dft(plan, c_in, c_out)
-    !call dfftw_destroy_plan(plan)
-    !data_real_3D = data_real_3D + real(c_out(1:Np(1),1:Np(2),1:Np(3)))
-
-
-    !if(rank == 0) print*, "maxval(data_real_3D) ++- = ", maxval(data_real_3D) 
-    !if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
-
-
-    !!Quadrant (+ - -)
-    !c_in = 0d0
-    !print*, "phiK(1,1,1,4) = ", phiK(1,sz_Sk(2)+1,sz_Sk(3)+1)
-    !c_in(1:Np(1), &
-    !     sz_c(2)-sz_Sk(2)+1:sz_c(2), &
-    !     sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,sz_Sk(2):1:-1,sz_Sk(3):1:-1)*&
-    !                                                    phiK(:,sz_Sk(2)+1:,sz_Sk(3)+1:)
-    !if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
-    !if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
-    !call dfftw_plan_dft_3d(plan ,L,M,N, c_in,c_out,FFTW_BACKWARD, FFTW_ESTIMATE)
-    !call dfftw_execute_dft(plan, c_in, c_out)
-    !call dfftw_destroy_plan(plan)
-    !if(rank == 0) print*, "maxval(c_out) +-- = ", maxval(real(c_out)) 
-    !if(rank == 0) print*, "minval(c_out) AFTER = ", minval(real(c_out))
-    !data_real_3D = data_real_3D + real(c_out(1:Np(1),1:Np(2),1:Np(3)))
-
-    !if(rank == 0) print*, "maxval(data_real_3D) +-- = ", maxval(data_real_3D) 
-    !if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
 
    if(allocated(c_in))   deallocate(c_in)
    if(allocated(c_out))  deallocate(c_out)
