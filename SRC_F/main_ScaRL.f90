@@ -378,24 +378,24 @@ program main_ScaRL
                                    pointsPerCorrL, corrMod, &
                                    seedStart, rank)
 
-            !if(rank == 0) print*, "apply_UnityPartition " 
-            !call apply_UnityPartition_mtx(Np, Np_ovlp,&
-            !                              partition_type, &
-            !                              topo_pos, topo_shape, &
-            !                              k_mtx)
-            !
-            !if(rank == 0) print*, "add_overlap " 
-            !call add_overlap(k_mtx, Np, Np_ovlp, rank, &
-            !               nb_procs, topo_pos, topo_shape, &
-            !               comm_group)
+            if(rank == 0) print*, "apply_UnityPartition " 
+            call apply_UnityPartition_mtx(Np, Np_ovlp,&
+                                          partition_type, &
+                                          topo_pos, topo_shape, &
+                                          k_mtx)
             
-            !if(rank == 0) print*, "normalize_field " 
-            !call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
-            !                     rank, comm_group, k_mtx)
+            if(rank == 0) print*, "add_overlap " 
+            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
+                           nb_procs, topo_pos, topo_shape, &
+                           comm_group)
             
-            !if(rank == 0) print*, "multivariateTransformation " 
-            !call multiVariateTransformation(avg, std_dev, margiFirst, &
-            !                                k_mtx)
+            if(rank == 0) print*, "normalize_field " 
+            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+                                 rank, comm_group, k_mtx)
+            
+            if(rank == 0) print*, "multivariateTransformation " 
+            call multiVariateTransformation(avg, std_dev, margiFirst, &
+                                            k_mtx)
             
             if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
             if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
@@ -620,14 +620,14 @@ program main_ScaRL
         maxPos = Np
         where(topo_pos /= (topo_shape-1)) maxPos = Np - Np_ovlp
         xNTotal = product((topo_shape*(Np-Np_ovlp)) +Np_ovlp)
-        print*, "xNTotal = ", xNTotal
+        if(rank==0) print*, "    Normalizing average and stdDev of Gaussian ensemble"
 
         !AVERAGE
         sumRF = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))) 
         call MPI_ALLREDUCE (sumRF,totalSumRF,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
         avg = sumRF/dble(xNTotal)
-        if(rank==0) print*, "avg BEFORE = ", avg
+        if(rank==0) print*, "    avg BEFORE = ", avg
         randField = randField - avg
 
         !VARIANCE
@@ -635,8 +635,10 @@ program main_ScaRL
         call MPI_ALLREDUCE (sumRFsquare,totalSumRFsquare,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
         std_dev = sqrt(sumRFsquare/dble(xNTotal))
-        if(rank==0) print*, "std_dev BEFORE = ", std_dev
+        if(rank==0) print*, "    std_dev BEFORE = ", std_dev
         randField = randField/std_dev
+        if(rank==0) print*, "    avg AFTER = ", 0d0
+        if(rank==0) print*, "    std_dev AFTER = ", 1d0
                 
         end subroutine normalize_field
 

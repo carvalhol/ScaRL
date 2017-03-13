@@ -48,8 +48,8 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
 
     xRange = xRange_in/corrL
     sz_c = 2**ceiling(log(dble(2*Np))/log(2d0))
-    print*, "Np       = ", Np
-    print*, "Size FFT = ", sz_c
+    if(rank ==0)  print*, "Np       = ", Np
+    if(rank ==0)  print*, "Size FFT = ", sz_c
     L = sz_c(1)
     M = sz_c(2)
     N = sz_c(3)
@@ -64,7 +64,7 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
         
         k_max = 1/delta_x
         delta_k = k_max/dble(sz_c/2)
-        if(any(k_max < k_cut)) then
+        if(any(k_max < k_cut) .and. rank == 0) then
             print*, "WARNING!! k_max = ", k_max, "< k_cut = ", k_cut
             print*, "Your mesh is too coarse to this representation, truncating k_cut (it may generate an ill-represented field)"
             where(k_max > k_cut) k_cut = k_max
@@ -85,7 +85,8 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
         if(rank==0) print*, "delta_k = ", delta_k
         if(rank==0) print*, "sz_Sk = ", sz_Sk
         
-        delta_exp(:) = ((PI**2d0)/2d0)*((delta_k**2d0))/(corrL**2.0d0)
+        !delta_exp(:) = ((PI**2d0)/2d0)*((delta_k**2d0))/(corrL**2.0d0)
+        delta_exp(:) = ((PI**2d0)/2d0)*((delta_k**2d0))
         if(rank==0) print*, "delta_exp = ", delta_exp
         Sk_mtx(1,:,:)=0d0
         Sk_mtx(:,1,:)=0d0
@@ -97,7 +98,8 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
         do ii = 2, sz_Sk(1)
             do jj = 2, sz_Sk(2)
                 do kk = 2, sz_Sk(3)
-                    spec_val = sqrt(exp(-(sum((dble([ii,jj,kk]-1)**2d0)*delta_exp(:)))))
+                    !spec_val = sqrt(exp(-(sum(((dble([ii,jj,kk]-1)**2d0)*delta_exp(:))/corrL**2d0))))
+                    spec_val = sqrt(exp(-(sum(((dble([ii,jj,kk]-1)**2d0)*delta_exp(:))))))
                     Sk_mtx(ii,jj,kk) = Sk_mtx(ii,jj,kk)*spec_val !+++
                     Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,kk) = Sk_mtx(ii,(sz_Sk(2)*2)-jj+1,kk)*spec_val !+-+
                     Sk_mtx(ii,jj,(sz_Sk(3)*2)-kk+1) = Sk_mtx(ii,jj,(sz_Sk(3)*2)-kk+1)*spec_val !++-
@@ -105,8 +107,9 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
                 end do
             end do
         end do
-        if(rank==0) print *, "Sk_mtx = ", Sk_mtx(2,2,:)
-        Sk_mtx = sqrt(8d0*product(corrL))*Sk_mtx !From the spectra definition
+        !if(rank==0) print *, "Sk_mtx = ", Sk_mtx(2,2,:)
+        !Sk_mtx = sqrt(8d0*product(corrL))*Sk_mtx !From the spectra definition
+        Sk_mtx = sqrt(8d0)*Sk_mtx !From the spectra definition
         Sk_mtx = 2d0*sqrt(product(delta_k))*Sk_mtx !Shinozuka formula
     end select
      !Sk_mtx = Sk_mtx/sqrt(dble(product(sz_c))) !FFT normalization
@@ -115,7 +118,6 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     !Computing data
     data_real_3D = 0d0
     allocate(c_in (sz_c(1),sz_c(2),sz_c(3)))
-    allocate(c_out(sz_c(1),sz_c(2),sz_c(3)))
     
     !c_in(1:sz_Sk(1),1:sz_Sk(2),1:sz_Sk(3)) = Sk_mtx !TESTE +++
     !data_real_3D = real(c_in(1:Np(1),1:Np(2),1:Np(3))) !TESTE
@@ -142,6 +144,7 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
          sz_c(3)-sz_Sk(3)+1:sz_c(3)) = Sk_mtx(:,sz_Sk(2)+1:,sz_Sk(3)+1:)
    
     if(allocated(Sk_mtx)) deallocate(Sk_mtx)
+    allocate(c_out(sz_c(1),sz_c(2),sz_c(3)))
 
     if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
     if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
@@ -155,11 +158,10 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     if(rank == 0) print*, "maxval(data_real_3D) +-- = ", maxval(data_real_3D) 
     if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
 
+    if(allocated(c_in))   deallocate(c_in)
+    if(allocated(c_out))  deallocate(c_out)
+    if(allocated(Sk_mtx)) deallocate(Sk_mtx)
 
-   if(allocated(c_in))   deallocate(c_in)
-   if(allocated(c_out))  deallocate(c_out)
-   if(allocated(Sk_mtx)) deallocate(Sk_mtx)
-   if(allocated(phiK))  deallocate(phiK)
 end subroutine gen_Std_Gauss_Shino_FFT
 
 !-------------------------------------------------------------
