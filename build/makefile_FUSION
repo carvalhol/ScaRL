@@ -1,16 +1,18 @@
 #### PATH TO HDF5 AND MPI LIBRARY AND INCLUDES - to be modified by user (to be completed)
 
-LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
-INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/include
+#module load intel-compiler/14.0.0
+#module load intel-mkl/11.1.0
+#module load intel-mpi/4.0.0.028
+#module load hdf5/1.8.12
 
-LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
-INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/include
-LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
-INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
+#LIBHDF5 = -L/opt/san/bibliotheques/hdf5/1.8.12/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran
+#INCLUDEHDF5 = -I/opt/san/bibliotheques/hdf5/1.8.12/include
+#LIBMPI = -L/opt/san/intel15/impi/5.0.2.044/lib64/ -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64 
+#INCLUDEMPI = -I/opt/san/intel15/impi/5.0.2.044/include64
 
-EXEC  = ScaRL.exe
+EXEC = autoTest.exe
+#FC   = ifort
 FC   = mpiifort
-FFLAGS = -g -O1 -cpp -DMAKELOG
 
 #### FROM THIS POINT ON THE USER SHOULD NOT MODIFY
 RM := rm -rf
@@ -21,55 +23,44 @@ SRCS = $(wildcard *.f90 *.f)
 #Create a ".f90" for each source
 #OBJS = $(SRCS:.f90=.o) #SYNTAX NOT WORKING
 
-ScaRL_OBJ += ./main_ScaRL.o \
-               write_output.o \
-               str_functions.o \
-               hdf5_ScaRL.o \
-               fftw_ScaRL.o \
-               constants_ScaRL.o \
-               normal_ScaRL.o \
-               read_input.o
-LIBS = $(LIBHDF5) $(LIBMPI) $(LIBFFTW)
-INCLUDE = $(INCLUDEHDF5) $(INCLUDEMPI) $(INCLUDEFFTW)
+OBJS += ./main_AutoTest.o \
+	./charFunctions.o \
+	./systemUt_RF.o \
+	./constants_Auto.o \
+	./fileManag_Auto.o
+
+LIBS = $(LIBHDF5) $(LIBMPI) 
+INCLUDE = $(INCLUDEHDF5) $(INCLUDEMPI)
 
 #Dependencies
-#main_ScaRL.o   : constants_ScaRL.o
-main_ScaRL.o   : write_output.o \
-                 str_functions.o \
-                 fftw_ScaRL.o \
-                 constants_ScaRL.o \
-                 read_input.o
-write_output.o : str_functions.o \
-                 hdf5_ScaRL.o \
-                 constants_ScaRL.o
-read_input.o   : str_functions.o
-fftw_ScaRL.o   : constants_ScaRL.o \
-                 normal_ScaRL.o
+main_AutoTest.o   : systemUt_RF.o charFunctions.o constants_Auto.o fileManag_Auto.o
+fileManag_Auto.o  : charFunctions.o constants_Auto.o
 
 # Making all the ".o" from the ".f90"
-%.o: ../SRC_F/%.f90
+%.o: ../SRC/%.f90
 	@echo 'Building file: $<'
 	@echo 'Invoking: Fortran Compiler'
-	$(FC) $(FFLAGS) -o "$@" $(INCLUDE) -c "$<"
+	$(FC) -o "$@" $(INCLUDE) -c "$<"
 	@echo 'Finished building: $<'
-	@echo ' '	
+	@echo ' '
+
 	
 # All Target
-all: ScaRL
+all: autoTest
 
 # Tool invocations
-ScaRL: $(ScaRL_OBJ)
+autoTest: $(OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: Fortran Linker'
-	$(FC) -o $(EXEC) $(FFLAGS) $(ScaRL_OBJ) $(INCLUDE) $(LIBS)
+	$(FC) -o $(EXEC) $(OBJS) $(INCLUDE) $(LIBS)
 	@echo 'Finished building target: $@'
-	@echo ' '	
-	
+	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) $(EXEC) $(ScaRL_OBJ) *.mod
-	-@echo 'Finished excluding'
+	-$(RM) $(EXECUTABLE) $(OBJS) *.mod
+	-@echo ' '
 
 .PHONY: all clean dependents
 .SECONDARY:
+
