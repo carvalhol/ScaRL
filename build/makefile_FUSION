@@ -1,14 +1,12 @@
 #### PATH TO HDF5 AND MPI LIBRARY AND INCLUDES - to be modified by user (to be completed)
 
-
-LIBHDF5     = -L ~/LOCAL/lib -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -ldl -lm
-INCLUDEHDF5 = -I ~/LOCAL/include
+LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/include
 
 LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
 INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/include
-
-LIBFFTW     = -L ~/LOCAL/lib -lfftw3_mpi -lfftw3 -lfftw3_threads
-INCLUDEFFTW = -I ~/LOCAL/include
+LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
+INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
 
 EXEC  = ScaRL.exe
 FC   = mpiifort
