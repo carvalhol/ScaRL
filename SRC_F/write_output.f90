@@ -727,14 +727,33 @@ contains
     subroutine write_time_on_hdf5(time_label, time_trace, &
                                    HDF5_name, res_folder, &
                                    rank, nb_procs, comm)
-       
+      
+        implicit none 
+         
         character(len=*), dimension(:), intent(in) :: time_label
         double precision, dimension(:), intent(in) :: time_trace
         character(len=*), intent(in) :: HDF5_name, res_folder
         integer, intent(in) :: rank, nb_procs, comm
-        !LOCAL
+        !HDF5 VARIABLES
+        integer(HID_T)                 :: file_id       !File identifier
+        integer(HID_T)                 :: dset_id       !Dataset identifier
+        integer(HID_T)                 :: memspace      ! Dataspace identifier in memory
+        integer(HID_T)                 :: filespace
+        integer                        :: ds_rank !Dataset rank (number of dimensions)
+        integer(HSIZE_T), dimension(2) :: ds_size !Dataset dimensions
+        integer                        :: error !Error flag
+        integer(HID_T) :: tid, dsetid, spaceid
+        integer :: hdferr
+        integer(HSIZE_T), dimension(1) :: dims
+        
+        !LOCAL VARIABLES
+        character(len=1024) :: HDF5_path
+        character(len=1024) :: ds_name
+        double precision, dimension(size(time_trace)) :: time_delta
         double precision, dimension(:,:), allocatable :: time_all
         integer :: code
+
+        time_delta = time_trace - time_trace(1)
 
         if(rank == 0) then
             print*, "Writing time on hdf5 file"
@@ -744,7 +763,7 @@ contains
             allocate(time_all(size(time_trace),nb_procs))
         end if
 
-        call MPI_GATHER(time_trace,size(time_trace), &
+        call MPI_GATHER(time_delta,size(time_trace), &
                         MPI_DOUBLE_PRECISION,      &
                         time_all,size(time_trace), &
                         MPI_DOUBLE_PRECISION,    &
@@ -752,6 +771,43 @@ contains
 
         if(rank == 0) then
             print*, "time_all = ", time_all
+
+            !PREPARING ENVIROMENT
+            ds_rank = 2
+            ds_size = shape(time_all)
+            ds_name = "times"
+            HDF5_path = str_cat(res_folder,"/",HDF5_name)
+
+            !HDF5 WRITING
+            call h5open_f(error) ! Initialize FORTRAN interface.
+            call h5fopen_f(trim(HDF5_path), H5F_ACC_RDWR_F, file_id, error) !Open File
+            !call h5fcreate_f(HDF5_path, H5F_ACC_TRUNC_F, file_id, error) !NEW file_id
+            call h5screate_simple_f(ds_rank, ds_size, filespace, error) !NEW filespace (the size of the whole table)
+            call h5dcreate_f(file_id, ds_name, H5T_NATIVE_DOUBLE, filespace, dset_id, error) !NEW dset_id
+            call h5screate_simple_f(ds_rank, ds_size, memspace, error)  !NEW memspace
+
+            call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, &
+                            time_all,  &
+                            ds_size, error, &
+                            file_space_id = filespace, &
+                            mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
+
+            dims(1) = size(time_label)
+            call H5Tcopy_f(H5T_FORTRAN_S1, tid, hdferr)
+            call H5Tset_size_f(tid, 20_HSIZE_T, hdferr)
+            call H5Screate_simple_f(1, dims, spaceid, hdferr)
+            call H5Dcreate_f(file_id, "time_labels", tid, spaceid, dsetid, hdferr)
+            call H5Dwrite_f(dsetid, tid, time_label, dims, hdferr, spaceid, spaceid)
+            call H5Dclose_f(dsetid, hdferr) 
+            call H5Sclose_f(spaceid, hdferr)
+            call H5Tclose_f(tid, hdferr)
+
+            call h5sclose_f(memspace, error) !CLOSE memspace
+            call h5dclose_f(dset_id, error) !CLOSE dset_id
+            call h5sclose_f(filespace, error) !CLOSE filespace
+            call h5fclose_f(file_id, error) !CLOSE file_id
+            call h5close_f(error) ! Close FORTRAN interface
+
         end if
     end subroutine write_time_on_hdf5
 

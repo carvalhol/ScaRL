@@ -175,6 +175,30 @@ contains
     !-----------------------------------------------------------------------------------------------
     !-----------------------------------------------------------------------------------------------
     !-----------------------------------------------------------------------------------------------
+    subroutine write_h5attr_char_vec(file_id, attr_name, data)
+        use HDF5
+        integer(HID_T), intent(in) :: file_id
+        character(len=*), intent(in) :: attr_name
+        character(len=*), dimension(:), intent(in) :: data
+        integer :: hdferr
+        integer(HID_T) :: attr_id, space_id
+        integer(HSIZE_T), dimension(2) :: dims
+
+        dims(1) = len(data(1))
+        dims(2) = size(data)
+        call h5screate_f(H5S_SIMPLE_F, space_id, hdferr)
+        call h5sset_extent_simple_f(space_id, 2, dims, dims, hdferr) !Set the size of the attribute
+        call h5acreate_f(file_id, attr_name, H5T_NATIVE_CHARACTER, space_id, attr_id, hdferr, H5P_DEFAULT_F)
+        call h5awrite_f(attr_id, H5T_NATIVE_CHARACTER, data, dims, hdferr)
+        call h5aclose_f(attr_id, hdferr)
+        call h5sclose_f(space_id, hdferr)
+
+    end subroutine write_h5attr_char_vec
+    
+    !-----------------------------------------------------------------------------------------------
+    !-----------------------------------------------------------------------------------------------
+    !-----------------------------------------------------------------------------------------------
+    !-----------------------------------------------------------------------------------------------
     subroutine read_h5attr_int(dset, attr, value)
         use HDF5
         integer(HID_T), intent(in) :: dset
