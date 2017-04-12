@@ -189,7 +189,7 @@ contains
         call MPI_BCAST (xMinGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (xMaxGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (corrL,    3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
-        call MPI_BCAST (overlap,  3*nSamples, MPI_INTEGER         , 0, comm_group, code)
+        call MPI_BCAST (overlap,  3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (pointsPerCorrL, 3*nSamples, MPI_INTEGER   , 0, comm_group, code)
         call MPI_BCAST (corrMod   , nSamples, MPI_INTEGER   , 0, comm_group, code)
         call MPI_BCAST (margiFirst, nSamples, MPI_INTEGER   , 0, comm_group, code)

@@ -719,4 +719,40 @@ contains
         end if
 
     end subroutine write_HDF5_attributes
+
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    subroutine write_time_on_hdf5(time_label, time_trace, &
+                                   HDF5_name, res_folder, &
+                                   rank, nb_procs, comm)
+       
+        character(len=*), dimension(:), intent(in) :: time_label
+        double precision, dimension(:), intent(in) :: time_trace
+        character(len=*), intent(in) :: HDF5_name, res_folder
+        integer, intent(in) :: rank, nb_procs, comm
+        !LOCAL
+        double precision, dimension(:,:), allocatable :: time_all
+        integer :: code
+
+        if(rank == 0) then
+            print*, "Writing time on hdf5 file"
+            print*, "HDF5_name  = ", trim(HDF5_name)
+            print*, "res_folder = ", trim(res_folder)
+            print*, "nb_procs = ", nb_procs
+            allocate(time_all(size(time_trace),nb_procs))
+        end if
+
+        call MPI_GATHER(time_trace,size(time_trace), &
+                        MPI_DOUBLE_PRECISION,      &
+                        time_all,size(time_trace), &
+                        MPI_DOUBLE_PRECISION,    &
+                        0,comm,code)
+
+        if(rank == 0) then
+            print*, "time_all = ", time_all
+        end if
+    end subroutine write_time_on_hdf5
+
 end module write_output

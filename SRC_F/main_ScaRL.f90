@@ -25,7 +25,8 @@ program main_ScaRL
     integer, dimension(:,:), allocatable :: pointsPerCorrL
     
     !INPUTS HARD
-    integer(kind = 8) :: pointsPerBlockIdeal = 100*100*100
+    !integer(kind = 8) :: pointsPerBlockIdeal = 100*100*100
+    integer(kind = 8) :: pointsPerBlockIdeal = 4*4*4
        
     !LOCAL VARIABLES
     integer, dimension(3) :: Np, Np_temp
@@ -35,10 +36,17 @@ program main_ScaRL
     double precision, dimension(3) :: xStep
     integer :: color, nb_procs_tmp, rank_tmp, code
     character (len=1024) :: command
+    double precision, dimension(10) :: time_trace
+    character (len=20), dimension(10) :: time_label
+    integer :: time_count
     integer :: s
 
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
+
+    time_count = 1
+    time_label(time_count) = "Initial"
+    time_trace(time_count) = MPI_Wtime()
 
     call read_input_ScaRL("./input_ScaRL.txt", rank, &
                           nSamples, output_folder, &
@@ -57,23 +65,16 @@ program main_ScaRL
     end if
     call MPI_BARRIER (comm_group ,code)
 
+    time_count = time_count + 1
+    time_label(time_count) = "Read_input"
+    time_trace(time_count) = MPI_Wtime()
+   
     do s = 1, nSamples !----------------------------
     if(rank == 0) print*, "==================================================== "
     if(rank == 0) print*, "Generating SAMPLE ",s 
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
-    !output_name(s) = str_cat("sample_", num2str(s))
-    !avg(s) = dble(s)
-    !CV(s) = dble(s)
-    !seedBase(s) = s
-    !xMinGlob(:,s) = [0d0, 0d0, 0d0]
-    !xMaxGlob(:,s) = [10d0, 10d0, 10d0]
-    !corrL(:,s)    = [1d0, 2d0, 3d0]
-    !corrMod(s) = cm_GAUSSIAN
-    !margiFirst(s) = fom_LOGNORMAL
-    !overlap(:,s) = [5d0,5d0,5d0]
-    !pointsPerCorrL(:,s) = [5,5,5]
      
     call verify_inputs(xMinGlob(:,s), xMaxGlob(:,s), corrL(:,s), & 
                        overlap(:,s), avg(s), std_dev(s), corrMod(s), margiFirst(s),&
@@ -83,12 +84,18 @@ program main_ScaRL
     L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
     Np_ovlp = ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)))
     xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
-
+    !print *, "rank, Np_ovlp =", rank, Np_ovlp
+    !print *, "rank, overlap =", rank, overlap(:,s)
+    !print *, "rank, pointspcorrl =", rank, pointsPerCorrL(:,s)
+    !print *, "xMinGlob   =", L
+    !print *, "xMaxGlob   =", L
+    !print *, "L          =", L
     !Finding place in topology and defining the number of points per processor (Np)
     call decide_topo_shape(nb_procs, L, Np_ovlp, &
                            pointsPerBlockIdeal, & 
-                           topo_shape)
+                           topo_shape, rank)
     
+    !print *, "L2         =", L
     !Changing to keep only procs used in this topology
     nb_procs_tmp = nb_procs
     nb_procs = product(topo_shape)
@@ -119,6 +126,10 @@ program main_ScaRL
         end if
 
         Np = ceiling(dble(L + ((topo_shape-1)*Np_ovlp))/dble(topo_shape))
+        !print *, "L   rg", rank," =", L
+        !print *, "topo_shape   rg", rank," =", topo_shape
+        !print *, "Np_ovlp  rg", rank," =", Np_ovlp
+        !print *, "Np  rg", rank," =", Np
 
         !Condition to not overlap more than 8 overlap areas
         Np_temp = Np
@@ -144,8 +155,11 @@ program main_ScaRL
 
         call get_topo_pos(rank, topo_shape, topo_pos)
         
+        time_count = time_count + 1
+        time_label(time_count) = "Topology"
+        time_trace(time_count) = MPI_Wtime()
 
-        !Creating Fields
+       !Creating Fields
         call create_fields(Np, Np_ovlp, L, pointsPerCorrL(:,s), rank, &
                            nb_procs, topo_pos, topo_shape, &
                            xStep, xMinGlob(:,s), &
@@ -154,7 +168,8 @@ program main_ScaRL
                            margiFirst(s), avg(s), std_dev(s), &
                            comm_group, &
                            output_name(s), &
-                           output_folder)
+                           output_folder, &
+                           time_count, time_label, time_trace)
     end if
 
     if(rank == 0) print*, " "
@@ -295,7 +310,8 @@ program main_ScaRL
                                  seedBase, &
                                  margiFirst, avg, std_dev, &
                                  comm_group, &
-                                 output_name, res_folder)
+                                 output_name, res_folder, &
+                                 time_count, time_label, time_trace)
             implicit none
             !INPUT
             integer, dimension(3), intent(in) :: Np
@@ -311,6 +327,11 @@ program main_ScaRL
             integer, intent(in) :: seedBase
             double precision, intent(in) :: avg, std_dev
             character(len=*), intent(in) :: output_name, res_folder
+
+            !OUTPUT
+            integer, intent(inout) :: time_count 
+            character(len=*), dimension(:), intent(inout) :: time_label
+            double precision, dimension(:), intent(inout) :: time_trace
              
             !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
@@ -377,96 +398,121 @@ program main_ScaRL
                                    xRange, corrL, &
                                    pointsPerCorrL, corrMod, &
                                    seedStart, rank)
+           time_count = time_count + 1
+           time_label(time_count) = "Generation"
+           time_trace(time_count) = MPI_Wtime()
 
-            if(rank == 0) print*, "apply_UnityPartition " 
-            call apply_UnityPartition_mtx(Np, Np_ovlp,&
-                                          partition_type, &
-                                          topo_pos, topo_shape, &
-                                          k_mtx)
-            
-            if(rank == 0) print*, "add_overlap " 
-            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
-                           nb_procs, topo_pos, topo_shape, &
-                           comm_group)
-            
-            if(rank == 0) print*, "normalize_field " 
-            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
-                                 rank, comm_group, k_mtx)
-            
-            if(rank == 0) print*, "multivariateTransformation " 
-            call multiVariateTransformation(avg, std_dev, margiFirst, &
-                                            k_mtx)
-            
-            if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
-            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
+           if(rank == 0) print*, "apply_UnityPartition " 
+           call apply_UnityPartition_mtx(Np, Np_ovlp,&
+                                         partition_type, &
+                                         topo_pos, topo_shape, &
+                                         k_mtx)
+           time_count = time_count + 1
+           time_label(time_count) = "Apply_unit"
+           time_trace(time_count) = MPI_Wtime()
+           
+           if(rank == 0) print*, "add_overlap " 
+           call add_overlap(k_mtx, Np, Np_ovlp, rank, &
+                          nb_procs, topo_pos, topo_shape, &
+                          comm_group)
+           time_count = time_count + 1
+           time_label(time_count) = "Add_overlap"
+           time_trace(time_count) = MPI_Wtime()
+          
+           if(rank == 0) print*, "normalize_field " 
+           call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+                                rank, comm_group, k_mtx)
+           time_count = time_count + 1
+           time_label(time_count) = "Normalize"
+           time_trace(time_count) = MPI_Wtime()
+           
+           if(rank == 0) print*, "multivariateTransformation " 
+           call multiVariateTransformation(avg, std_dev, margiFirst, &
+                                           k_mtx)
+           time_count = time_count + 1
+           time_label(time_count) = "Multivar_trans"
+           time_trace(time_count) = MPI_Wtime()
+           
+           if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
+           if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
-            if(rank == 0) print*, "write HDF5 " 
-            if(oneFile) then 
-                if(oneDataSet) then
-                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
-                                     coord_N,     &
-                                     xMinGlob, xMaxGlob, &
-                                     pos_0, pos_N, &
-                                     L, Np, Np_ovlp, &
-                                     k_mtx,       &
-                                     str_cat(output_name,".h5"),  &
-                                     str_cat(output_name,".xmf"),  &
-                                     res_folder,           &
-                                     rank, nb_procs,           &
-                                     comm_group)
-                    if(rank == 0) then
-                        call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
-                                     nb_procs, 3, 1, FFT, seedBase, &
-                                     corrMod, margiFirst, &
+           if(rank == 0) print*, "write HDF5 " 
+           if(oneFile) then 
+               if(oneDataSet) then
+                   call write_hdf5_multi_proc_3D_1ds(coord_0, &
+                                    coord_N,     &
+                                    xMinGlob, xMaxGlob, &
+                                    pos_0, pos_N, &
+                                    L, Np, Np_ovlp, &
+                                    k_mtx,       &
+                                    str_cat(output_name,".h5"),  &
+                                    str_cat(output_name,".xmf"),  &
+                                    res_folder,           &
+                                    rank, nb_procs,           &
+                                    comm_group)
+                   if(rank == 0) then
+                       call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
+                                    nb_procs, 3, 1, FFT, seedBase, &
+                                    corrMod, margiFirst, &
+                                    topo_shape, &
+                                    xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                    .false.)
+                   end if
+               else 
+                   call write_hdf5_multi_proc_3D(coord_0, &
+                                    coord_N,     &
+                                    xMinGlob, xMaxGlob, &
+                                    pos_0, pos_N, &
+                                    k_mtx,       &
+                                    str_cat(output_name,".h5"),  &
+                                    res_folder,           &
+                                    rank, nb_procs,           &
+                                    comm_group)
+               end if
+           else
+               HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
+               XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
+               call write_hdf5_single_proc_3D(coord_0, &
+                                          coord_N, &
+                                          xMinGlob, xMaxGlob, &
+                                          pos_0, pos_N, &
+                                          k_mtx, &
+                                          HDF5_name, &
+                                          XMF_name, &
+                                          res_folder, &
+                                          rank)
+           end if
+
+           if(rank==0 .and. (.not.(oneFile .and.oneDataSet))) then
+               if(rank == 0) print*, "WRITING GLOBAL XMF" 
+               do temp_rank = 0, nb_procs-1
+                   call get_topo_pos(temp_rank,  &
                                      topo_shape, &
-                                     xMinGlob, xMaxGlob, xStep, corrL, overlap, &
-                                     .false.)
-                    end if
-                else 
-                    call write_hdf5_multi_proc_3D(coord_0, &
-                                     coord_N,     &
-                                     xMinGlob, xMaxGlob, &
-                                     pos_0, pos_N, &
-                                     k_mtx,       &
-                                     str_cat(output_name,".h5"),  &
-                                     res_folder,           &
-                                     rank, nb_procs,           &
-                                     comm_group)
-                end if
-            else
-                HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
-                XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
-                call write_hdf5_single_proc_3D(coord_0, &
-                                           coord_N, &
-                                           xMinGlob, xMaxGlob, &
-                                           pos_0, pos_N, &
-                                           k_mtx, &
-                                           HDF5_name, &
-                                           XMF_name, &
-                                           res_folder, &
-                                           rank)
-            end if
+                                     temp_topo_pos)
+                   HDF5_list(temp_rank+1) = &
+                    str_cat(output_name,"_proc_",trim(num2str(temp_rank,5)),".h5")
+                   if(oneFile)  HDF5_list(temp_rank+1) = &
+                                 str_cat(output_name,".h5") 
+                   temp_origin = (Np-Np_ovlp)*temp_topo_pos            
+                   coord_0_list(:, temp_rank+1) = &
+                       dble(temp_origin)*xStep + xMinGlob
+               end do
+               call write_XMF_global(str_cat(res_folder,"/",output_name,".xmf"), &
+                                HDF5_list, &
+                                coord_0_list, xStep, &
+                                shape(k_mtx), nb_procs)
+           end if
+           
+           time_count = time_count + 1
+           time_label(time_count) = "Write_file"
+           time_trace(time_count) = MPI_Wtime()
 
-            if(rank==0 .and. (.not.(oneFile .and.oneDataSet))) then
-                if(rank == 0) print*, "WRITING GLOBAL XMF" 
-                do temp_rank = 0, nb_procs-1
-                    call get_topo_pos(temp_rank,  &
-                                      topo_shape, &
-                                      temp_topo_pos)
-                    HDF5_list(temp_rank+1) = &
-                     str_cat(output_name,"_proc_",trim(num2str(temp_rank,5)),".h5")
-                    if(oneFile)  HDF5_list(temp_rank+1) = &
-                                  str_cat(output_name,".h5") 
-                    temp_origin = (Np-Np_ovlp)*temp_topo_pos            
-                    coord_0_list(:, temp_rank+1) = &
-                        dble(temp_origin)*xStep + xMinGlob
-                end do
-                call write_XMF_global(str_cat(res_folder,"/",output_name,".xmf"), &
-                                 HDF5_list, &
-                                 coord_0_list, xStep, &
-                                 shape(k_mtx), nb_procs)
-            end if
-
+           call write_time_on_hdf5(time_label(1:time_count), &
+                                   time_trace(1:time_count), &
+                                   str_cat(output_name,".h5"), &
+                                   res_folder, &
+                                   rank, nb_procs, comm_group)
+        
         end subroutine create_fields
 
 
@@ -517,14 +563,14 @@ program main_ScaRL
         !-----------------------------------------------------------
         subroutine decide_topo_shape(nb_procs, L, nPointsOvlp, &
                                      pointsPerBlockIdeal, & 
-                                     topo_shape)
+                                     topo_shape, rank)
 
             implicit none
             !INPUT
             integer, intent(in) :: nb_procs
             integer, dimension(3), intent(in) :: L, nPointsOvlp
             integer(kind = 8), intent(in) :: pointsPerBlockIdeal
-
+            integer, intent(in) :: rank
             !OUTPUT
             integer, dimension(3), intent(out) :: topo_shape
             !LOCAL
@@ -548,10 +594,11 @@ program main_ScaRL
                 nTotalPointsProc = product(int(nPointsPerProc,8))
                 if(nTotalPointsProc <= pointsPerBlockIdeal) then
                     nFieldsOK = .true.
+                else if(product(nBlocks) >= nb_procs) then 
+                    nFieldsOK = .true. 
                 else
                     pos = maxloc(nPointsPerProc, 1)
                     nBlocks(pos) = nBlocks(pos) + 1
-                    if(product(nBlocks) > nb_procs) nFieldsOK = .true. 
                 end if
 
                 !print*, "nPoints = ", nPoints
@@ -561,7 +608,8 @@ program main_ScaRL
             end do
 
             nBlocksIdeal = nBlocks
-
+            if(rank == 0) print*, "L = ", L
+            if(rank == 0) print*, "nBlocksIdeal = ", nBlocksIdeal
 
             np_total = nb_procs
             vol_surf_factor_temp = 0D0
@@ -594,6 +642,7 @@ program main_ScaRL
                 end if
             end do
             topo_shape = nFieldsChosen
+            if(rank == 0) print*, "topo_shape = ", topo_shape
 
         end subroutine decide_topo_shape
 
@@ -706,7 +755,7 @@ program main_ScaRL
         logical :: snd, rcv
         integer :: BufDT_size
         integer :: ii, jj, kk, cnt
-        integer :: rang_test=0
+        integer :: rang_test=-1,r_sender = 1, r_receiver = 6
 
         !Defining neighbours
         cnt = 0
@@ -737,14 +786,14 @@ program main_ScaRL
                                            op_neigh_rank(cnt)) 
                     end if
                     
-                   ! if(neigh_rank(cnt) /= rank .or. op_neigh_rank(cnt) /= rank)then 
-                   ! if(rang_test == rank) print*, "rk ", rank, "neigh shift", neigh_shift(:,cnt), "---------------"
-                   ! if(rang_test == rank .and. neigh_rank(cnt) /= rank) &
-                   !       print*, "neigh = ", neigh_rank(cnt)
-                   ! if(rang_test == rank .and. op_neigh_rank(cnt) /= rank) &
-                   !       print*, "op_ng = ", op_neigh_rank(cnt) 
-                   ! if(rang_test == rank) print*, "  " 
-                   ! end if
+                    if(neigh_rank(cnt) /= rank .or. op_neigh_rank(cnt) /= rank)then 
+                    if(rang_test == rank) print*, "rk ", rank, "neigh shift", neigh_shift(:,cnt), "---------------"
+                    if(rang_test == rank .and. neigh_rank(cnt) /= rank) &
+                          print*, "neigh = ", neigh_rank(cnt)
+                    if(rang_test == rank .and. op_neigh_rank(cnt) /= rank) &
+                          print*, "op_ng = ", op_neigh_rank(cnt) 
+                    if(rang_test == rank) print*, "  " 
+                    end if
 
                 end do
             end do
@@ -768,9 +817,13 @@ program main_ScaRL
         bufferSize = overEst*(nOvlpMax+overHead)
         allocate(buffer(bufferSize))
         call MPI_BUFFER_ATTACH(buffer, int(double_size*bufferSize),code)
-
+        if(code /= 0) then
+            print*, "ERROR in MPI_BUFFER_ATTACH"
+            print*, "MPI_BUFFER_ATTACH code = ",code
+            stop(" ")
+        end if
         !Communications
-        RF_temp1 = 0
+        RF_temp1 = 0d0
 
         do dir = 1, size(neigh_rank)
 
@@ -786,13 +839,32 @@ program main_ScaRL
             where(neigh_shift(:,dir) == 1 ) minP = Np - Np_ovlp + 1
             where(neigh_shift(:,dir) == -1) maxP = Np_ovlp
             totalSize = (product(maxP - minP + 1))
+            !if(rank == r_sender) print*, "Np = ", Np
+            !print*, "Np = ", Np
+            !if(rank == r_sender) print*, "Np_ovlp = ", Np_ovlp
+            !if(rank == r_sender) print*, "direction = ", dir
+            !if(rank == r_sender) print*, "dirShift  = ", dirShift
+            !if(rank == r_sender) print*, "minP  = ", minP
+            !if(rank == r_sender) print*, "maxP  = ", maxP
+            
+            !if(rank == r_sender) then
+            !    print*, "ANALYSE rank = ", neigh_rank(dir)
+            !end if
 
+            !if(rank == r_sender) print*, "snd 1= ", snd
             if(neigh_rank(dir) == rank) snd = .false. !Check if this direction exists
+            !if(rank == r_sender) print*, "snd 2= ", snd
             if(any(maxP <= minP)) snd = .false. !Degenerated cases
+            !if(rank == r_sender) print*, "snd 3= ", snd
+
+            !TEST
+            !if(rank /= r_sender) snd=.false.
+            !if(rank == r_sender) print*, "snd 4= ", snd
+            !if(neigh_rank(dir) /= r_receiver) snd=.false.
+            !if(rank == r_sender) print*, "snd 5= ", snd
 
             if(snd) then
-                !call wLog(" SENDING ==============")
-                
+                !if(rank == r_sender) print*, " SENDING =============="
                 tag = neighRank
 
                 call MPI_IBSEND (RF(minP(1):maxP(1), &
@@ -819,8 +891,12 @@ program main_ScaRL
             if(neigh_rank(op_dir) == rank) rcv = .false. !Check if this direction exists
             if(any(maxP <= minP)) rcv = .false. !Degenerated cases
 
+            !TEST
+            !if(rank /= r_receiver) rcv=.false.
+            !if(neigh_rank(op_dir) /= r_sender) rcv=.false.
+
             if(rcv) then
-                !if(rank == rang_test) print*, " RECEIVING =============="
+                !if(rank == r_receiver) print*, " RECEIVING =============="
 
                 tag  = rank
                 RF_temp2 = 0.0D0
@@ -833,14 +909,14 @@ program main_ScaRL
                     RF_temp1(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))   &
                     + RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
                 
-               ! if(rank == rang_test) print*, "  RECVER: rank ", rank
-               ! if(rank == rang_test) print*, "  FROM rank ", neighRank
-               ! if(rank == rang_test) print*, "  minP = ", minP
-               ! if(rank == rang_test) print*, "  maxP = ", maxP
-               ! if(rank == rang_test) print*, "  op_dir_shft = ", -dirShift
-               ! if(rank == rang_test) print*, "  totalSize = ", totalSize
-               ! if(rank == rang_test) print*, "  tag = ", tag
-               ! if(rank == rang_test) print*, "  CONTENT = ", RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
+                if(rank == rang_test) print*, "  RECVER: rank ", rank
+                if(rank == rang_test) print*, "  FROM rank ", neighRank
+                if(rank == rang_test) print*, "  minP = ", minP
+                if(rank == rang_test) print*, "  maxP = ", maxP
+                if(rank == rang_test) print*, "  op_dir_shft = ", -dirShift
+                if(rank == rang_test) print*, "  totalSize = ", totalSize
+                if(rank == rang_test) print*, "  tag = ", tag
+                if(rank == rang_test) print*, "  CONTENT = ", RF_temp2(minP(1):maxP(1),minP(2):maxP(2),minP(3):maxP(3))
             else
             
             end if

@@ -122,8 +122,8 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     !c_in(1:sz_Sk(1),1:sz_Sk(2),1:sz_Sk(3)) = Sk_mtx !TESTE +++
     !data_real_3D = real(c_in(1:Np(1),1:Np(2),1:Np(3))) !TESTE
 
-    if(rank == 0) print*, "maxval(data_real_3D) BEFORE = ", maxval(data_real_3D) 
-    if(rank == 0) print*, "minval(data_real_3D) BEFORE = ", minval(data_real_3D)
+    !if(rank == 0) print*, "maxval(data_real_3D) BEFORE = ", maxval(data_real_3D) 
+    !if(rank == 0) print*, "minval(data_real_3D) BEFORE = ", minval(data_real_3D)
     
     c_in = 0d0
     !Quadrant(+++)
@@ -146,16 +146,16 @@ subroutine gen_std_gauss_Shino_FFT(data_real_3D, Np, &
     if(allocated(Sk_mtx)) deallocate(Sk_mtx)
     allocate(c_out(sz_c(1),sz_c(2),sz_c(3)))
 
-    if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
-    if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
+    !if(rank == 0) print*, "maxval(c_in) +-- = ", maxval(real(c_in)) 
+    !if(rank == 0) print*, "minval(c_in) AFTER = ", minval(real(c_in))
     call dfftw_plan_dft_3d(plan ,L,M,N, c_in,c_out,FFTW_BACKWARD, FFTW_ESTIMATE)
     call dfftw_execute_dft(plan, c_in, c_out)
     call dfftw_destroy_plan(plan)
-    if(rank == 0) print*, "maxval(c_out) +-- = ", maxval(real(c_out)) 
-    if(rank == 0) print*, "minval(c_out) AFTER = ", minval(real(c_out))
+    !if(rank == 0) print*, "maxval(c_out) +-- = ", maxval(real(c_out)) 
+    !if(rank == 0) print*, "minval(c_out) AFTER = ", minval(real(c_out))
     data_real_3D = real(c_out(1:Np(1),1:Np(2),1:Np(3)))
 
-    if(rank == 0) print*, "maxval(data_real_3D) +-- = ", maxval(data_real_3D) 
+    if(rank == 0) print*, "maxval(data_real_3D) AFTER = ", maxval(data_real_3D) 
     if(rank == 0) print*, "minval(data_real_3D) AFTER = ", minval(data_real_3D)
 
     if(allocated(c_in))   deallocate(c_in)
