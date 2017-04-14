@@ -369,7 +369,7 @@ contains
 
         fileID = 28
         fid2 = 29
-        outName = "out_RF"
+        outName = "output_run"
         nDim_chSz = findCharSize(nDim)
         nProcsPerChunk_chSz = findCharSize(nProcsPerChunk)
         nChunks_chSz = findCharSize(nChunks)
@@ -442,8 +442,10 @@ contains
             write(fileId,"(A)") "module load intel-compilers/16.0.3"
             write(fileId,"(A)") "module load intel-mkl/11.3.3"
             write(fileId,"(A)") "module load intel-mpi/5.1.2"
-            write(fileId,"(A)") "export LD_LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64"
-            write(fileId,"(A)") "export LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64"
+            write(fileId,"(A)") "module load phdf5/1.8.17-IntelMPI"
+            write(fileId,"(A)") "module load fftw/3.3.4"
+            !write(fileId,"(A)") "export LD_LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64"
+            !write(fileId,"(A)") "export LIBRARY_PATH=~/LOCAL/lib:/gpfs/opt/compilers/intel/compilers_and_libraries_2016.3.210/linux/compiler/lib/intel64"
         end if
 
         write(fileId,"(A)") ""
@@ -453,7 +455,7 @@ contains
         write(fileId,"(A)") "cat $PBS_NODEFILE | uniq > mpd.hosts"
         write(fileId,"(A)") "nb_nodes=`cat mpd.hosts|wc -l`"
         write(fileId,"(A)") ""
-        write(fileId,"(A)") "startTime=`date -u`"
+        write(fileId,"(A)") "startTime=`date`"
         write(fileId,"(A)") "for ((i=1;  i<=$nRuns; i++))"
         write(fileId,"(A)") "do"
         write(fileId,"(A)") 'echo "Running " $i'
@@ -467,7 +469,7 @@ contains
         write(fileId,"(A)") '    mpirun -np 1 '//trim(exec2Path)//"<stat_input"
         write(fileId,"(A)") 'fi'
         write(fileId,"(A)") 'done'
-        write(fileId,"(A)") "endTime=`date -u`"
+        write(fileId,"(A)") "endTime=`date`"
         write(fileId,"(A)") ""
         write(fileId,"(A)") 'echo "     nRuns=$nRuns"'
         write(fileId,"(A)") 'echo "Start time $startTime"'
@@ -490,7 +492,7 @@ contains
         write(fid2,"(A)") 'Run=0'
         write(fid2,"(A)") 'Open_Output=0'
         write(fid2,"(A)") ''
-        write(fid2,"(A)") 'Build_Path="/home/carvalhol/RANDOM_FIELD/build"'
+        write(fid2,"(A)") 'Build_Path="/home/carvalhol/ScaRL/build"'
         write(fid2,"(A)") 'Queue="'//trim(queue)//'"'
         write(fid2,"(A)") 'Mail="lucianopaludoecp@gmail.com"'
         write(fid2,"(A)") 'User="carvalhol"'
@@ -539,19 +541,19 @@ contains
         write(fid2,"(A)") ''
         write(fid2,"(A)") 'if [[ "$Only_Build" -eq "0" ]]; then'
         write(fid2,"(A)") '   rm $output_Name'
-        write(fid2,"(A)") '   qsub -v NP=$NP,Run_Stat=$Run_Stat,Run_RF=$Run_RF \'
-        write(fid2,"(A)") '   -S /bin/bash \'
-        write(fid2,"(A)") '   -N $list_Name \'
-        write(fid2,"(A)") '   -o $output_Name \'
-        write(fid2,"(A)") '   -j oe \'
-        write(fid2,"(A)") '   -l walltime=$W_TIME \'
-        write(fid2,"(A)") '   -l select=$N_SELECT:ncpus=$N_CPU:mpiprocs=$N_CPU:mem=$mem \'
-        write(fid2,"(A)") '   -q $Queue \'
-        write(fid2,"(A)") '   -M $Mail \'
-        if(cluster == FUSION) write(fid2,"(A)") "    -P omaha \"
-        write(fid2,"(A)") '   $PBS_Name'
+        write(fid2,"(A)") '   #qsub -v NP=$NP,Run_Stat=$Run_Stat,Run_RF=$Run_RF \'
+        write(fid2,"(A)") '   #-S /bin/bash \'
+        write(fid2,"(A)") '   #-N $list_Name \'
+        write(fid2,"(A)") '   #-o $output_Name \'
+        write(fid2,"(A)") '   #-j oe \'
+        write(fid2,"(A)") '   #-l walltime=$W_TIME \'
+        write(fid2,"(A)") '   #-l select=$N_SELECT:ncpus=$N_CPU:mpiprocs=$N_CPU:mem=$mem \'
+        write(fid2,"(A)") '   #-q $Queue \'
+        write(fid2,"(A)") '   #-M $Mail \'
+        if(cluster == FUSION) write(fid2,"(A)") "#    -P omaha \"
+        write(fid2,"(A)") '   #$PBS_Name'
+        write(fid2,"(A)") '   qsub -v NP=$NP,Run_Stat=$Run_Stat,Run_RF=$Run_RF $PBS_Name'
         write(fid2,"(A)") '   qstat -u $User'
-        write(fid2,"(A)") '   qsub $PBS_Name'
         write(fid2,"(A)") 'fi'
         write(fid2,"(A)") '  '
         write(fid2,"(A)") 'if [[ "$Open_Output" -eq "1" ]]; then'
@@ -608,7 +610,7 @@ contains
         integer :: i
 
         fileID = 28
-        outName = "out_RF"
+        outName = "output_RF"
         !memTot = memPerChunk*nChunks/1000
         memTot = 64
         nDim_chSz = findCharSize(nDim)

@@ -82,6 +82,9 @@ program main_ScaRL
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
     L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
+    print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
+    print*, "ceiling = ", ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))
+    print*, "L = ", L
     Np_ovlp = ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)))
     xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
     !print *, "rank, Np_ovlp =", rank, Np_ovlp

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-(cd /home/carvalhol/Projects/Utilities/AutoTest/build; make all)
+(cd /home/carvalhol/ScaRL/AutoTest/build; make all)
 #qsub run.pbs
 rm -r genTests
 ./build/autoTest.exe 

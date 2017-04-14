@@ -8,10 +8,11 @@ program main_AutoTest
     implicit none
 
     !USER
-    character(len=50), parameter :: res_folder = "WEAK-4P"
-    integer         , parameter :: pMin3D=4,   pMax3D = pMin3D,     pMult3D = 1
-    double precision, parameter :: xMin3D=4d0, xMax3D = 8d0, xMult3D = 2d0**(0.333333333333333d0)
-    integer, parameter :: cluster = IGLOO !IGLOO, OCCYGEN, LOCAL_MAC, FUSION, S_DUMONT
+    character(len=50), parameter :: res_folder = "WEAK"
+    integer         , parameter :: pMin3D=1,   pMax3D =512 
+    integer         , parameter :: pPow3D=3, pAdd=1, pMult3D = 1
+    double precision, parameter :: xMin3D=31d0, xMax3D =10000d0, xMult3D = 2d0**(0.333333333333333d0)
+    integer, parameter :: cluster = FUSION !IGLOO, OCCYGEN, LOCAL_MAC, FUSION, S_DUMONT
     double precision, dimension(NDIM,NDIM), parameter :: xMax_init = reshape([1d0, 0d0, 0d0, &
                                                                               1d0, 1d0, 0d0, &
                                                                               xMin3D, xMin3D, xMin3D], &
@@ -31,7 +32,7 @@ program main_AutoTest
     integer :: nRuns = 1 !How many times each iteration
     logical, dimension(NDIM) :: activeDim      = [.false., .false., .true.] !1D, 2D and 3D
     logical, dimension(4) :: activeMethod   = [.false., .false. , .false. , .true.] !Isotropic, Shinozuka, Randomization and FFT
-    logical, dimension(2) :: activeApproach = [.true. , .false.] !Global, Local
+    logical, dimension(2) :: activeApproach = [.false. , .true.] !Global, Local
 
     !COMPUTATION
     integer :: memPerNTerm = 1000 !mb
@@ -142,7 +143,7 @@ program main_AutoTest
             mem_per_chunk_Max = 64000
             n_chunk_Max = 80000/24
         case(FUSION)
-            buildPath = "/home/carvalhol/RANDOM_FIELD/build"
+            buildPath = "/home/carvalhol/ScaRL/build"
             proc_per_chunk_Max = 24
             mem_per_chunk_Max = 24000
             n_chunk_Max = 56
@@ -167,7 +168,7 @@ program main_AutoTest
     elsewhere
         nIter(:) = nint(log(dble(nProc_max(:))/dble(nProc_init(:)))/log(dble(nProc_mult(:)))) 
     end where
-    write(*,*) "nIter = ", nIter
+    !write(*,*) "nIter = ", nIter
 
     !Global folders and files creation
     call delete_folder(res_folder, basePath)
@@ -249,12 +250,12 @@ program main_AutoTest
             write(runAll_Id,"(A)")
             write(runAll_Id,"(A)") "nRuns="//numb2String(nRuns)
             write(runAll_Id,"(A)") "Run_RF=1"
-            write(runAll_Id,"(A)") "Run_Stat=1"
+            write(runAll_Id,"(A)") "Run_Stat=0"
             write(runAll_Id,"(A)") "sleep_time=0"
             write(runAll_Id,"(A)") "for i in {1..1}"
             write(runAll_Id,"(A)") "do"
             write(runAll_Id,"(A)") '   echo "Running $i"'
-            write(listAll_Id,"(A)") 'res="results"'
+            write(listAll_Id,"(A)") 'res="SAMPLES"'
             write(cleanAll_Id,"(A)") 'res="logs stat_input mpd.hosts"'
             write(cleanAll_Id,"(A)") '#res="results logs stat_input mpd.hosts"'
 
@@ -272,7 +273,8 @@ program main_AutoTest
                 methodTxt = trim(adjustl(string_join_many(methodTxt,"-",indepChar)))
 
                 !Creating iterations
-                do it = 1, nIter(d)
+                !do it = 1, nIter(d)
+                do it = 1, 100
 
                     !Creating folder
                     it_path   = string_join_many(basePath,res_folder,"/",     &
@@ -286,13 +288,13 @@ program main_AutoTest
                     call set_vec(corrL, [(corrLBase, i=1, d)])
                     call set_vec(overlap, [(overlapBase, i=1, d)])
 
-                    !MESH FILE
-                    call set_vec(xMax, [(1.0D0, i=1, d)]) !Starts xMax in 1
-                    call set_vec(xMin, [(0.0D0, i=1, d)])  !Starts xMin in 0
-                    call set_vec_Int(pointsPerCorrL, [(pointsPerCorrLBase, i=1, d)])
-
-                    xMax        = xMax_init(1:d,d)*(xMax_mult(1:d,d)**(dble(it-1)))
-                    nProcsTotal = nProc_init(d)*nint(dble(nProc_mult(d))**(dble(it-1)))
+                    !NUMBER OF PROCS
+                    nProcsTotal = nint(dble((&
+                                  nProc_init(d)+(pAdd*(it-1))&
+                                  )&
+                                  *nint(dble(nProc_mult(d))**(dble(it-1)))&
+                                  )**dble(pPow3D))
+                    if(nProcsTotal > nProc_max(d)) exit 
                     nChunks = ceiling(dble(nProcsTotal)/dble(proc_per_chunk_Max))
                     nProcsPerChunk = nProcsTotal;
                     if(nChunks > 1) then
@@ -305,14 +307,28 @@ program main_AutoTest
                     if(memPerChunk < 512) memPerChunk = 512
                     if(imposeMaxMemory == .true.) memPerChunk = mem_per_chunk_Max
 
+
+                    !DOMAIN SIZE
+                    call set_vec(xMax, [(1.0D0, i=1, d)]) !Starts xMax in 1
+                    call set_vec(xMin, [(0.0D0, i=1, d)])  !Starts xMin in 0
+                    call set_vec_Int(pointsPerCorrL, [(pointsPerCorrLBase, i=1, d)])
+
+                    !xMax        = xMax_init(1:d,d)*(xMax_mult(1:d,d)**(dble(it-1)))
+                    xMax = xMax_init(1:d,d)
+                    xMax = xMax_init(1:d,d) + &
+                           dble(it-1)*(xMax_init(1:d,d)-overlapBase)
+
+                    if(any(xMax > xMax_max(:,d))) exit
+
                     !Defining nFields
                     nFields(:) = 1
 
                     if(independent == 1) then
-                        do i = 2, it
-                            pos = 4-(mod(i-2,d) + 1)
-                            nFields(pos) = nFields(pos) * 2
-                        end do
+                        nFields(:) = it
+                    !    do i = 2, it
+                    !        pos = 4-(mod(i-2,d) + 1)
+                    !        nFields(pos) = nFields(pos) * 2
+                    !    end do
                     end if
 
 
