@@ -40,13 +40,13 @@ program main_ScaRL
     character (len=20), dimension(10) :: time_label
     integer :: time_count
     integer :: s
+    double precision :: time_tic, time_toc
 
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
-    time_count = 1
-    time_label(time_count) = "Initial"
-    time_trace(time_count) = MPI_Wtime()
+    !time_label(time_count) = "Initial"
+    time_tic = MPI_Wtime()
 
     !if(rank == 0) 
     !print*, "COISA LINDA==================================================== "
@@ -68,9 +68,11 @@ program main_ScaRL
     end if
     call MPI_BARRIER (comm_group ,code)
 
-    time_count = time_count + 1
+    time_toc = MPI_Wtime()
+    time_count = 1
     time_label(time_count) = "Read_input"
-    time_trace(time_count) = MPI_Wtime()
+    time_trace(time_count) = time_toc-time_tic
+    time_tic = MPI_Wtime()
    
     do s = 1, nSamples !----------------------------
     if(rank == 0) print*, "==================================================== "
@@ -85,14 +87,14 @@ program main_ScaRL
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
     xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
-    print*, "xStep = ", xStep
+    !print*, "xStep = ", xStep
     !L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
     L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/xStep)
-    print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
+    !print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
     !print*, "ceiling = ", ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))
-    print*, "L = ", L
+    !print*, "L = ", L
     Np_ovlp = 1+ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)-1))
-    print *, "rank, Np_ovlp =", rank, Np_ovlp
+    !print *, "rank, Np_ovlp =", rank, Np_ovlp
     !print *, "rank, overlap =", rank, overlap(:,s)
     !print *, "rank, pointspcorrl =", rank, pointsPerCorrL(:,s)
     !print *, "xMinGlob   =", L
@@ -103,7 +105,7 @@ program main_ScaRL
                            pointsPerBlockIdeal, & 
                            topo_shape, rank)
     
-    print *, "L2         =", L
+    !print *, "L2         =", L
     !Changing to keep only procs used in this topology
     nb_procs_tmp = nb_procs
     nb_procs = product(topo_shape)
@@ -151,7 +153,7 @@ program main_ScaRL
             if(rank == 0) print *, "AFTER: Np = ",  Np, "Np_ovlp = ", Np_ovlp
         end if
 
-         print *, "Np  rg", rank," =", Np
+        !print *, "Np  rg", rank," =", Np
         L = Np*topo_shape - ((topo_shape-1)*Np_ovlp)
         if(rank == 0) print *, "nb_procs   =", nb_procs
         if(rank == 0) print *, "topo_shape =", topo_shape
@@ -163,9 +165,11 @@ program main_ScaRL
 
         call get_topo_pos(rank, topo_shape, topo_pos)
         
+        time_toc = MPI_Wtime()
         time_count = time_count + 1
         time_label(time_count) = "Topology"
-        time_trace(time_count) = MPI_Wtime()
+        time_trace(time_count) = time_toc-time_tic
+        time_tic = MPI_Wtime()
 
        !Creating Fields
         call create_fields(Np, Np_ovlp, L, pointsPerCorrL(:,s), rank, &
@@ -318,7 +322,7 @@ program main_ScaRL
                                  seedBase, &
                                  margiFirst, avg, std_dev, &
                                  comm_group, &
-                                 output_name, res_folder, &
+                                 output_name_in, res_folder, &
                                  time_count, time_label, time_trace)
             implicit none
             !INPUT
@@ -334,7 +338,7 @@ program main_ScaRL
             integer, intent(in) :: corrMod, margiFirst
             integer, intent(in) :: seedBase
             double precision, intent(in) :: avg, std_dev
-            character(len=*), intent(in) :: output_name, res_folder
+            character(len=*), intent(in) :: output_name_in, res_folder
 
             !OUTPUT
             integer, intent(inout) :: time_count 
@@ -343,7 +347,7 @@ program main_ScaRL
              
             !LOCAL
             double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
-            character(len=1024) :: HDF5_name, XMF_name
+            character(len=1024) :: output_name, HDF5_name, XMF_name
             double precision, dimension(3) :: coord_0, coord_N
             integer         , dimension(3) :: pos_0, pos_N
             double precision, dimension(3) :: xMaxGlob
@@ -358,7 +362,35 @@ program main_ScaRL
             integer :: seedStart
             double precision, dimension(3) :: xRange, overlap
             integer :: code
+            double precision :: time_tic, time_toc
+            character(len=10), dimension(3) :: strings
+            integer, dimension(8) :: date_time
+            character(len=50) :: date_str
+            character(len=1024) :: filePath
+            logical :: fileExists
+
+            time_tic = MPI_Wtime()
             
+            output_name = output_name_in
+            
+            filePath = str_cat(res_folder,"/",output_name,".h5")
+            if(rank == 0) print*, "filePath = ", trim(filePath)
+            inquire(file=filePath, exist=fileExists)
+            if(rank == 0) print*, "     exists? ",fileExists
+            
+            if(fileExists) then
+                if(rank == 0) then
+                    call date_and_time(strings(1), strings(2), strings(3), date_time)
+                    date_str = strings(1)(3:8)//"_"//strings(2)(1:6)
+                end if
+                
+                call MPI_BCAST (date_str, len(date_str), &
+                                MPI_CHARACTER, 0, comm_group, code)
+
+                output_name = str_cat(output_name_in,"-",date_str)
+                if(rank == 0) print*, "NEW output_name = ", trim(output_name)
+            end if
+             
             pos_0 = (Np-Np_ovlp)*topo_pos + 1
             pos_N = pos_0 + Np-1            
             coord_0 = dble(pos_0-1)*xStep + xMinGlob
@@ -406,40 +438,51 @@ program main_ScaRL
                                    xRange, corrL, &
                                    pointsPerCorrL, corrMod, &
                                    seedStart, rank)
-           time_count = time_count + 1
-           time_label(time_count) = "Generation"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Generation"
+            time_trace(time_count) = time_toc-time_tic
+            time_tic = MPI_Wtime()
 
            if(rank == 0) print*, "apply_UnityPartition " 
            call apply_UnityPartition_mtx(Np, Np_ovlp,&
                                          partition_type, &
                                          topo_pos, topo_shape, &
                                          k_mtx)
-           time_count = time_count + 1
-           time_label(time_count) = "Apply_unit"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Apply_unit"
+            time_trace(time_count) = time_toc-time_tic
+            time_tic = MPI_Wtime()
            
            if(rank == 0) print*, "add_overlap " 
            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                           nb_procs, topo_pos, topo_shape, &
                           comm_group)
-           time_count = time_count + 1
-           time_label(time_count) = "Add_overlap"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Add_overlap"
+            time_trace(time_count) = time_toc-time_tic
+            call MPI_Barrier(comm_group,code)
+            time_tic = MPI_Wtime()
           
            if(rank == 0) print*, "normalize_field " 
            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
                                 rank, comm_group, k_mtx)
-           time_count = time_count + 1
-           time_label(time_count) = "Normalize"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Normalize"
+            time_trace(time_count) = time_toc-time_tic
+            time_tic = MPI_Wtime()
            
            if(rank == 0) print*, "multivariateTransformation " 
            call multiVariateTransformation(avg, std_dev, margiFirst, &
                                            k_mtx)
-           time_count = time_count + 1
-           time_label(time_count) = "Multivar_trans"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Multivar_trans"
+            time_trace(time_count) = time_toc-time_tic
+            time_tic = MPI_Wtime()
            
            if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
@@ -511,9 +554,11 @@ program main_ScaRL
                                 shape(k_mtx), nb_procs)
            end if
            
-           time_count = time_count + 1
-           time_label(time_count) = "Write_file"
-           time_trace(time_count) = MPI_Wtime()
+            time_toc = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Write_file"
+            time_trace(time_count) = time_toc-time_tic
+            time_tic = MPI_Wtime()
 
            call write_time_on_hdf5(time_label(1:time_count), &
                                    time_trace(1:time_count), &

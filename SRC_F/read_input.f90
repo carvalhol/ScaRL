@@ -200,7 +200,7 @@ contains
 
       !  print*, "HERE BCAST"
         call MPI_BCAST (output_name, len(output_name), MPI_CHARACTER, 0, comm_group, code)
-        print*, "rank ", rank, "output_name(1): ", trim(output_name(1)) 
+        !print*, "rank ", rank, "output_name(1): ", trim(output_name(1)) 
         call MPI_BCAST (xMinGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (xMaxGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (corrL,    3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)

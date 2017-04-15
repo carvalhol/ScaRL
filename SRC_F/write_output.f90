@@ -753,7 +753,7 @@ contains
         double precision, dimension(:,:), allocatable :: time_all
         integer :: code
 
-        time_delta = time_trace - time_trace(1)
+        time_delta = time_trace
 
         if(rank == 0) then
             print*, "Writing time on hdf5 file"
