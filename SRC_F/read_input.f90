@@ -52,6 +52,10 @@ contains
             character(len=1024) :: buffer,cur_folder,file_path
             integer :: fid
             integer :: s, error, code
+        integer :: char_size
+        integer(kind=8) :: bufferSize
+        character(len=2048) :: bufferChar 
+        
 
         if(rank == 0) then
             call getcwd(cur_folder)
@@ -170,7 +174,7 @@ contains
         
         !Passing information to others
         call MPI_BCAST (nSamples, 1, MPI_INTEGER, 0, comm_group, code)
-        print*, "rank ", rank, "nSamples", nSamples   
+        !print*, "rank ", rank, "nSamples", nSamples   
         if(rank /= 0) then     
             allocate(output_name(nSamples))
             allocate(xMinGlob(3,nSamples))    
@@ -184,8 +188,19 @@ contains
             allocate(std_dev(nSamples))
             allocate(seedBase(nSamples))
         end if
-        
-        call MPI_BCAST (output_name, nSamples*len(output_name), MPI_CHARACTER, 0, comm_group, code)
+
+      !  call MPI_TYPE_SIZE(MPI_CHARACTER,char_size,code)
+      !  bufferSize = len(bufferChar)
+      !  call MPI_BUFFER_ATTACH(bufferChar, int(char_size*bufferSize),code)
+      !  if(code /= 0) then
+      !      print*, "ERROR in MPI_BUFFER_ATTACH"
+      !      print*, "MPI_BUFFER_ATTACH code = ",code
+      !      stop(" ")
+      !  end if
+
+      !  print*, "HERE BCAST"
+        call MPI_BCAST (output_name, len(output_name), MPI_CHARACTER, 0, comm_group, code)
+        print*, "rank ", rank, "output_name(1): ", trim(output_name(1)) 
         call MPI_BCAST (xMinGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (xMaxGlob, 3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)
         call MPI_BCAST (corrL,    3*nSamples, MPI_DOUBLE_PRECISION, 0, comm_group, code)

@@ -9,9 +9,10 @@ program main_AutoTest
 
     !USER
     character(len=50), parameter :: res_folder = "WEAK"
-    integer         , parameter :: pMin3D=1,   pMax3D =512 
+    integer         , parameter :: pMin3D=1,   pMax3D =512
     integer         , parameter :: pPow3D=3, pAdd=1, pMult3D = 1
     double precision, parameter :: xMin3D=31d0, xMax3D =10000d0, xMult3D = 2d0**(0.333333333333333d0)
+    integer, parameter :: alpha = 128
     integer, parameter :: cluster = FUSION !IGLOO, OCCYGEN, LOCAL_MAC, FUSION, S_DUMONT
     double precision, dimension(NDIM,NDIM), parameter :: xMax_init = reshape([1d0, 0d0, 0d0, &
                                                                               1d0, 1d0, 0d0, &
@@ -55,6 +56,8 @@ program main_AutoTest
     double precision :: corrLBase = 1.0D0
     double precision :: overlapBase = 5.0D0
     integer :: pointsPerCorrLBase = 5
+    integer, dimension(3) :: Np_ovlp
+    double precision, dimension(3) :: xStep
     integer :: seedStart = -1
     integer :: dimMin = 1, dimMax = 3
     integer :: methodMin = 1, methodMax = 4
@@ -123,6 +126,7 @@ program main_AutoTest
     character(len=200) :: results_path
     integer :: nProcsPerChunk
     integer :: nChunks
+
 
     select case (cluster)
         case(IGLOO)
@@ -314,9 +318,13 @@ program main_AutoTest
                     call set_vec_Int(pointsPerCorrL, [(pointsPerCorrLBase, i=1, d)])
 
                     !xMax        = xMax_init(1:d,d)*(xMax_mult(1:d,d)**(dble(it-1)))
-                    xMax = xMax_init(1:d,d)
-                    xMax = xMax_init(1:d,d) + &
-                           dble(it-1)*(xMax_init(1:d,d)-overlapBase)
+                    !xMax = xMax_init(1:d,d)
+                    !xMax = dble(alpha*it+Np_ovlp-1)*corrL/(dble(pointsPerCorrL-1))
+                    Np_ovlp = 1+ceiling(overlap*dble(pointsPerCorrL-1))
+                    print*, "Np_ovlp = ",  Np_ovlp
+                    xStep = corrL/(dble(pointsPerCorrL-1))
+                    print*, "xStep = ",  xStep
+                    xMax = (dble(alpha*it) - (it-1)*Np_ovlp -1)*xStep
 
                     if(any(xMax > xMax_max(:,d))) exit
 

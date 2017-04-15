@@ -48,6 +48,8 @@ program main_ScaRL
     time_label(time_count) = "Initial"
     time_trace(time_count) = MPI_Wtime()
 
+    !if(rank == 0) 
+    !print*, "COISA LINDA==================================================== "
     call read_input_ScaRL("./input_ScaRL.txt", rank, &
                           nSamples, output_folder, &
                           xMinGlob, xMaxGlob, &
@@ -57,6 +59,7 @@ program main_ScaRL
                           avg, std_dev, overlap, &
                           pointsPerCorrL, comm_group)
     
+    !print*, "COISA LINDA 2==================================================== "
     
     !Creating Output Folder 
     if(rank == 0) then
@@ -81,13 +84,15 @@ program main_ScaRL
                        pointsPerCorrL(:,s), pointsPerBlockIdeal)
 
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
-    L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
-    print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
-    print*, "ceiling = ", ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))
-    print*, "L = ", L
-    Np_ovlp = ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)))
     xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
-    !print *, "rank, Np_ovlp =", rank, Np_ovlp
+    print*, "xStep = ", xStep
+    !L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
+    L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/xStep)
+    print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
+    !print*, "ceiling = ", ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))
+    print*, "L = ", L
+    Np_ovlp = 1+ceiling(overlap(:,s)*dble(pointsPerCorrL(:,s)-1))
+    print *, "rank, Np_ovlp =", rank, Np_ovlp
     !print *, "rank, overlap =", rank, overlap(:,s)
     !print *, "rank, pointspcorrl =", rank, pointsPerCorrL(:,s)
     !print *, "xMinGlob   =", L
@@ -98,7 +103,7 @@ program main_ScaRL
                            pointsPerBlockIdeal, & 
                            topo_shape, rank)
     
-    !print *, "L2         =", L
+    print *, "L2         =", L
     !Changing to keep only procs used in this topology
     nb_procs_tmp = nb_procs
     nb_procs = product(topo_shape)
@@ -132,7 +137,6 @@ program main_ScaRL
         !print *, "L   rg", rank," =", L
         !print *, "topo_shape   rg", rank," =", topo_shape
         !print *, "Np_ovlp  rg", rank," =", Np_ovlp
-        !print *, "Np  rg", rank," =", Np
 
         !Condition to not overlap more than 8 overlap areas
         Np_temp = Np
@@ -147,6 +151,7 @@ program main_ScaRL
             if(rank == 0) print *, "AFTER: Np = ",  Np, "Np_ovlp = ", Np_ovlp
         end if
 
+         print *, "Np  rg", rank," =", Np
         L = Np*topo_shape - ((topo_shape-1)*Np_ovlp)
         if(rank == 0) print *, "nb_procs   =", nb_procs
         if(rank == 0) print *, "topo_shape =", topo_shape
@@ -173,7 +178,7 @@ program main_ScaRL
                            output_name(s), &
                            output_folder, &
                            time_count, time_label, time_trace)
-    end if
+   end if
 
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
@@ -181,7 +186,7 @@ program main_ScaRL
     if(rank == 0) print*, "==================================================== "
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
-    end do !---------------------------------
+   end do !---------------------------------
 
 
     if(allocated(output_name)) deallocate(output_name)

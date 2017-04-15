@@ -531,7 +531,7 @@ contains
         write(fid2,"(A)") '   Only_Build=0'
         write(fid2,"(A)") '   Delete_Results=1'
         write(fid2,"(A)") '   Open_Output=1'
-        write(fid2,"(A)") '   (cd $Build_Path; make)'
+        write(fid2,"(A)") '   (cd $Build_Path; make all)'
         write(fid2,"(A)") 'fi'
         write(fid2,"(A)") ''
         write(fid2,"(A)") 'if [[ "$Delete_Results" -eq "1" ]]; then'
