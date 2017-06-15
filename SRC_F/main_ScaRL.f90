@@ -40,13 +40,14 @@ program main_ScaRL
     character (len=20), dimension(10) :: time_label
     integer :: time_count
     integer :: s
-    double precision :: time_tic, time_toc
+    double precision :: time_tic, time_toc, time_init
 
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
     !time_label(time_count) = "Initial"
-    time_tic = MPI_Wtime()
+    time_init = MPI_Wtime() 
+    time_tic = time_init
 
     !if(rank == 0) 
     !print*, "COISA LINDA==================================================== "
@@ -181,7 +182,7 @@ program main_ScaRL
                            comm_group, &
                            output_name(s), &
                            output_folder, &
-                           time_count, time_label, time_trace)
+                           time_count, time_label, time_trace, time_init)
    end if
 
     if(rank == 0) print*, " "
@@ -323,7 +324,7 @@ program main_ScaRL
                                  margiFirst, avg, std_dev, &
                                  comm_group, &
                                  output_name_in, res_folder, &
-                                 time_count, time_label, time_trace)
+                                 time_count, time_label, time_trace, time_init)
             implicit none
             !INPUT
             integer, dimension(3), intent(in) :: Np
@@ -339,6 +340,7 @@ program main_ScaRL
             integer, intent(in) :: seedBase
             double precision, intent(in) :: avg, std_dev
             character(len=*), intent(in) :: output_name_in, res_folder
+            double precision, intent(in) :: time_init
 
             !OUTPUT
             integer, intent(inout) :: time_count 
@@ -357,7 +359,9 @@ program main_ScaRL
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
             !logical :: oneFile=.false.
-            logical :: oneFile=.true., oneDataSet=.true.
+            logical :: oneFile=.true., oneDataSet=.false.
+            logical :: w_info_file=.false.
+            logical :: delete_sample_file=.false.
             integer :: partition_type = 1
             integer :: seedStart
             double precision, dimension(3) :: xRange, overlap
@@ -366,8 +370,10 @@ program main_ScaRL
             character(len=10), dimension(3) :: strings
             integer, dimension(8) :: date_time
             character(len=50) :: date_str
-            character(len=1024) :: filePath
+            character(len=1024) :: filePath, info_file_name
             logical :: fileExists
+            double precision :: time_final
+
 
             time_tic = MPI_Wtime()
             
@@ -489,6 +495,8 @@ program main_ScaRL
 
            if(rank == 0) print*, "write HDF5 " 
            if(oneFile) then 
+               HDF5_name = str_cat(output_name,".h5")
+               XMF_name  = str_cat(output_name,".xmf")
                if(oneDataSet) then
                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
                                     coord_N,     &
@@ -496,29 +504,29 @@ program main_ScaRL
                                     pos_0, pos_N, &
                                     L, Np, Np_ovlp, &
                                     k_mtx,       &
-                                    str_cat(output_name,".h5"),  &
-                                    str_cat(output_name,".xmf"),  &
+                                    HDF5_name,  &
+                                    XMF_name,  &
                                     res_folder,           &
                                     rank, nb_procs,           &
                                     comm_group)
-                   if(rank == 0) then
-                       call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
-                                    nb_procs, 3, 1, FFT, seedBase, &
-                                    corrMod, margiFirst, &
-                                    topo_shape, &
-                                    xMinGlob, xMaxGlob, xStep, corrL, overlap, &
-                                    .false.)
-                   end if
                else 
                    call write_hdf5_multi_proc_3D(coord_0, &
                                     coord_N,     &
                                     xMinGlob, xMaxGlob, &
                                     pos_0, pos_N, &
                                     k_mtx,       &
-                                    str_cat(output_name,".h5"),  &
+                                    HDF5_name,  &
                                     res_folder,           &
                                     rank, nb_procs,           &
                                     comm_group)
+               end if
+               if(rank == 0) then
+                   call write_HDF5_attributes(str_cat(res_folder,"/",output_name,".h5"), &
+                                nb_procs, 3, 1, FFT, seedBase, &
+                                corrMod, margiFirst, &
+                                topo_shape, &
+                                xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                L, Np, Np_ovlp, .false.)
                end if
            else
                HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
@@ -532,6 +540,12 @@ program main_ScaRL
                                           XMF_name, &
                                           res_folder, &
                                           rank)
+               call write_HDF5_attributes(str_cat(res_folder,"/",HDF5_name), &
+                            nb_procs, 3, 1, FFT, seedBase, &
+                            corrMod, margiFirst, &
+                            topo_shape, &
+                            xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                            L, Np, Np_ovlp, .false.)
            end if
 
            if(rank==0 .and. (.not.(oneFile .and.oneDataSet))) then
@@ -560,11 +574,67 @@ program main_ScaRL
             time_trace(time_count) = time_toc-time_tic
             time_tic = MPI_Wtime()
 
+            call MPI_BARRIER(comm_group, code)
+            time_final = MPI_Wtime()
+            time_count = time_count + 1
+            time_label(time_count) = "Total_Wall_time"
+            time_trace(time_count) = time_final-time_init
+
+           if(rank==0) print*, "Writing times on ", trim(HDF5_name)
            call write_time_on_hdf5(time_label(1:time_count), &
                                    time_trace(1:time_count), &
-                                   str_cat(output_name,".h5"), &
+                                   HDF5_name, &
                                    res_folder, &
-                                   rank, nb_procs, comm_group)
+                                   rank, nb_procs, comm_group, oneFile)
+
+           if(w_info_file) then
+               if(rank==0) print*, "Writing INFO file"
+
+               if(rank==0) then
+                   info_file_name = str_cat("INFO-",output_name,".h5")
+                
+                   filePath = str_cat(res_folder,"/",info_file_name)
+                   if(rank == 0) print*, "filePath = ", trim(filePath)
+                   inquire(file=filePath, exist=fileExists)
+                   if(rank == 0) print*, "     exists? ",fileExists
+                   
+                   if(fileExists) then
+                       if(rank == 0) then
+                           call date_and_time(strings(1), strings(2), strings(3), date_time)
+                           date_str = strings(1)(3:8)//"_"//strings(2)(1:6)
+                       end if
+                       
+                       call MPI_BCAST (date_str, len(date_str), &
+                                       MPI_CHARACTER, 0, comm_group, code)
+
+                       info_file_name = str_cat("INFO-",output_name,"-",date_str,".h5")
+                       if(rank == 0) print*, "NEW info_file_name = ", trim(info_file_name)
+                   end if
+
+                   call write_info_file(info_file_name, res_folder, rank)
+                   print*, "Writing attributes"
+                   call write_HDF5_attributes(&
+                                str_cat(res_folder,"/",info_file_name), &
+                                nb_procs, 3, 1, FFT, seedBase, &
+                                corrMod, margiFirst, &
+                                topo_shape, &
+                                xMinGlob, xMaxGlob, xStep, corrL, overlap, &
+                                L, Np, Np_ovlp, .false.)
+               end if
+               
+               if(rank==0) print*, "Writing times"
+               call write_time_on_hdf5(time_label(1:time_count), &
+                                       time_trace(1:time_count), &
+                                       info_file_name, &
+                                       res_folder, &
+                                       rank, nb_procs, comm_group, &
+                                       oneFile=.true.)
+           end if
+
+           if(delete_sample_file .and. rank == 0) then
+              print*, "WARNING!! Deleting sample files (only INFO files will stand)"
+              call system("rm SAMPLES/S*")
+           end if
         
         end subroutine create_fields
 

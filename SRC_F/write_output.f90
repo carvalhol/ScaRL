@@ -47,9 +47,12 @@ contains
         character(len=1024) :: HDF5_temp
         double precision, dimension(:,:,:), allocatable :: randField_3D_temp
         double precision, dimension(3) :: xMin_temp, xMax_temp
+        integer, dimension(3) :: pos_0_temp, pos_N_temp
         integer :: i
         integer, dimension(MPI_STATUS_SIZE) :: statut
 
+        !TODO Each processor writes its own dataset (without passing through
+        !rank 0
         if(rank == 0) print*, "HDF5_name = ", trim(HDF5_name)
 
         if(rank /= 0) then
@@ -60,6 +63,10 @@ contains
                       0, 1, comm, error)
             call MPI_SEND(xMax, 3, MPI_DOUBLE_PRECISION, &
                       0, 2, comm, error)
+            call MPI_SEND(pos_0, 3, MPI_INTEGER, &
+                      0, 3, comm, error)
+            call MPI_SEND(pos_N, 3, MPI_INTEGER, &
+                      0, 4, comm, error)
             if(rank /= nb_procs-1) then
             call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
             end if
@@ -107,6 +114,10 @@ contains
                       i-1, 1, comm, statut, error)
         call MPI_RECV(xMax_temp, 3, MPI_DOUBLE_PRECISION, &
                       i-1, 2, comm, statut, error)
+        call MPI_RECV(pos_0_temp, 3, MPI_INTEGER, &
+                      i-1, 3, comm, statut, error)
+        call MPI_RECV(pos_N_temp, 3, MPI_INTEGER, &
+                      i-1, 4, comm, statut, error)
         
         call h5screate_simple_f(ds_rank, ds_size, filespace, error) !NEW filespace (the size of the whole table)
         call h5dcreate_f(file_id, ds_name, H5T_NATIVE_DOUBLE, filespace, dset_id, error) !NEW dset_id
@@ -120,6 +131,7 @@ contains
 
         call write_h5attr_real_vec(dset_id, "xMin", xMin_temp)
         call write_h5attr_real_vec(dset_id, "xMax", xMax_temp)
+        call write_pos_on_HDF5_dataset(dset_id, pos_0_temp, pos_N_temp)
         call h5sclose_f(memspace, error) !CLOSE memspace
         call h5dclose_f(dset_id, error) !CLOSE dset_id
         call h5sclose_f(filespace, error) !CLOSE filespace
@@ -146,16 +158,19 @@ contains
         double precision, dimension(2,2,2) :: constant_field
         character(len=1024) :: HDF5_name, XMF_name
         double precision, dimension(3) :: xStep
+        integer, dimension(3) :: pos_0, pos_N
 
         HDF5_name = str_cat(output_name,".h5")
         XMF_name  = str_cat(output_name,".xmf")
 
+        pos_0 = [1,1,1]
+        pos_N = [2,2,2]
         constant_field = avg
         xStep = xMaxGlob - xMinGlob
 
         call write_hdf5_single_proc_3D(xMinGlob, xMaxGlob, &
                                        xMinGlob, xMaxGlob, &
-                                       [1,1,1], [2,2,2], &
+                                       pos_0, pos_N, &
                                        constant_field, &
                                        HDF5_name, XMF_name,      &
                                        res_folder)
@@ -166,7 +181,7 @@ contains
                                      [1,1,1], &
                                      xMinGlob, xMaxGlob, xStep, &
                                      [-1d0,-1d0,-1d0], [0d0,0d0,0d0], &
-                                     .false.)
+                                     pos_N, pos_N, [0,0,0], .false.)
          
     end subroutine write_constant_field
     !-----------------------------------------------------
@@ -232,6 +247,7 @@ contains
 
         call write_h5attr_real_vec(dset_id, "xMin", xMin)
         call write_h5attr_real_vec(dset_id, "xMax", xMax)
+        call write_pos_on_HDF5_dataset(dset_id, pos_0, pos_N)
         call h5sclose_f(memspace, error) !CLOSE memspace
         call h5dclose_f(dset_id, error) !CLOSE dset_id
         call h5sclose_f(filespace, error) !CLOSE filespace
@@ -245,6 +261,48 @@ contains
                                 ".", ds_name)
 
     end subroutine write_hdf5_single_proc_3D
+    
+    !-----------------------------------------------------
+    !-----------------------------------------------------
+    !-----------------------------------------------------
+    !-----------------------------------------------------
+    subroutine write_info_file(info_file_name, &
+                               res_folder,     &
+                               rank)
+
+        implicit none
+
+        !INPUTS
+        character(len=*), intent(in)          :: info_file_name, res_folder
+        integer, intent(in) :: rank
+        
+        !HDF5 VARIABLES
+        integer(HID_T)                 :: file_id       !File identifier
+        integer(HID_T)                 :: dset_id       !Dataset identifier
+        integer(HID_T)                 :: memspace      ! Dataspace identifier in memory
+        integer(HID_T)                 :: filespace
+        integer                        :: ds_rank !Dataset rank (number of dimensions)
+        integer(HSIZE_T), dimension(3) :: ds_size !Dataset dimensions
+        integer                        :: error !Error flag
+        
+        !LOCAL VARIABLES
+        character(len=1024) :: info_file_path
+        double precision, dimension(3) :: xStep
+        character(len=1024) :: ds_name
+
+
+        !PREPARING ENVIROMENT
+        info_file_path = str_cat(res_folder,"/",info_file_name)
+        print*, "info_file_path = ", trim(info_file_path)
+
+        !HDF5 WRITING
+        call h5open_f(error) ! Initialize FORTRAN interface.
+        call h5fcreate_f(info_file_path, H5F_ACC_TRUNC_F, file_id, error) !NEW file_id
+        call h5fclose_f(file_id, error) !CLOSE file_id
+        call h5close_f(error) ! Close FORTRAN interface
+
+
+    end subroutine write_info_file
 
     !-----------------------------------------------------------
     !-----------------------------------------------------
@@ -368,6 +426,7 @@ contains
       
         if(i == nb_procs) call write_h5attr_real_vec(dset_id, "xMax", xMax_temp)
         end do
+        call write_pos_on_HDF5_dataset(dset_id, [1,1,1], L)
         call h5sclose_f(memspace, error) !CLOSE memspace
         call h5dclose_f(dset_id, error) !CLOSE dset_id
         call h5sclose_f(filespace, error) !CLOSE filespace
@@ -629,6 +688,27 @@ contains
 
 
     end subroutine mount_hdf5_files
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    !---------------------------------------------------------------------
+    subroutine write_pos_on_HDF5_dataset(ds_id, &
+                                         pos_0, pos_N)
+        implicit none
+        !INPUTS
+        integer(HID_T), intent(in) :: ds_id
+        integer, dimension(:), intent(in) :: pos_0, pos_N
+        !LOCAL
+        character(len=50) :: attr_name
+
+        !attr_name = "nFields"
+        !call write_h5attr_int_vec(file_id, attr_name, nFields)
+        attr_name = "pos_0"
+        call write_h5attr_int_vec(ds_id, trim(adjustL(attr_name)), pos_0)
+        attr_name = "pos_N"
+        call write_h5attr_int_vec(ds_id, trim(adjustL(attr_name)), pos_N)
+
+    end subroutine write_pos_on_HDF5_dataset
 
     !---------------------------------------------------------------------
     !---------------------------------------------------------------------
@@ -639,7 +719,7 @@ contains
                                      corrMod, margiFirst, &
                                      nFields, &
                                      xMinGlob, xMaxGlob, xStep, corrL, overlap, &
-                                     opened)
+                                     L, Np, Np_ovlp,  opened)
         implicit none
         !INPUTS
         character (len=*), intent(in) :: HDF5Path
@@ -647,6 +727,7 @@ contains
                                seedStart, corrMod, margiFirst
         double precision, dimension(:), intent(in) :: xMinGlob, xMaxGlob, xStep, corrL, overlap
         integer         , dimension(:), intent(in) :: nFields
+        integer         , dimension(:), intent(in) :: L, Np, Np_ovlp 
         logical, intent(in) :: opened
 
         !LOCAL
@@ -690,10 +771,16 @@ contains
         !call write_h5attr_int_vec(file_id, attr_name, kNStep_out)
         attr_name = "nFields"
         call write_h5attr_int_vec(file_id, attr_name, nFields)
-        !attr_name = "sum_xNStep"
-        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_xNStep)
-        !attr_name = "sum_kNStep"
-        !call write_h5attr_int(file_id, trim(adjustL(attr_name)), sum_kNStep)
+        !attr_name = "pos_0"
+        !call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), pos_0)
+        !attr_name = "pos_N"
+        !call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), pos_N)
+        attr_name = "Np"
+        call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), Np)
+        attr_name = "Np_ovlp"
+        call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), Np_ovlp)
+        attr_name = "L"
+        call write_h5attr_int_vec(file_id, trim(adjustL(attr_name)), L)
 
         !DOUBLE VEC
         attr_name = "xMinGlob"
@@ -726,7 +813,7 @@ contains
     !---------------------------------------------------------------------
     subroutine write_time_on_hdf5(time_label, time_trace, &
                                    HDF5_name, res_folder, &
-                                   rank, nb_procs, comm)
+                                   rank, nb_procs, comm, oneFile)
       
         implicit none 
          
@@ -734,6 +821,7 @@ contains
         double precision, dimension(:), intent(in) :: time_trace
         character(len=*), intent(in) :: HDF5_name, res_folder
         integer, intent(in) :: rank, nb_procs, comm
+        logical, intent(in) :: oneFile
         !HDF5 VARIABLES
         integer(HID_T)                 :: file_id       !File identifier
         integer(HID_T)                 :: dset_id       !Dataset identifier
@@ -749,28 +837,34 @@ contains
         !LOCAL VARIABLES
         character(len=1024) :: HDF5_path
         character(len=1024) :: ds_name
-        double precision, dimension(size(time_trace)) :: time_delta
         double precision, dimension(:,:), allocatable :: time_all
         integer :: code
-
-        time_delta = time_trace
+        logical :: writer
 
         if(rank == 0) then
             print*, "Writing time on hdf5 file"
             print*, "HDF5_name  = ", trim(HDF5_name)
             print*, "res_folder = ", trim(res_folder)
             print*, "nb_procs = ", nb_procs
-            allocate(time_all(size(time_trace),nb_procs))
         end if
 
-        call MPI_GATHER(time_delta,size(time_trace), &
-                        MPI_DOUBLE_PRECISION,      &
-                        time_all,size(time_trace), &
-                        MPI_DOUBLE_PRECISION,    &
-                        0,comm,code)
+        writer = .false.
+        if(oneFile)then
+            if(rank == 0) allocate(time_all(size(time_trace),nb_procs))
+            call MPI_GATHER(time_trace,size(time_trace), &
+                            MPI_DOUBLE_PRECISION,      &
+                            time_all,size(time_trace), &
+                            MPI_DOUBLE_PRECISION,    &
+                            0,comm,code)
+            if(rank == 0) writer = .true.
+        else
+            allocate(time_all(size(time_trace),1))
+            time_all(:,1) = time_trace
+            writer = .true.
+        end if
 
-        if(rank == 0) then
-            print*, "time_all = ", time_all
+        if(writer) then
+            !if(rank == 0) print*, "time_all = ", time_all
 
             !PREPARING ENVIROMENT
             ds_rank = 2

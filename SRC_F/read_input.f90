@@ -67,7 +67,7 @@ contains
                 if(rank == 0) print*, "WARNING: 'random.spec' found, generating files for SEM"   
                 file_path = str_cat(cur_folder,"/domains.txt")
                 if(.not. fileExist(file_path)) then
-                    print*, "'domains.txt'NOT FOUND (Did you run the mesher?"
+                    print*, "'domains.txt'NOT FOUND (Did you run the mesher?)"
                     call MPI_ABORT(comm_group, error, code)
                 end if
                 call read_input_SEM(cur_folder, rank, &
@@ -401,6 +401,20 @@ contains
                 avg(s)                       = prop(s-1)%avg
                 std_dev(s)                   = prop(s-1)%CV*prop(s-1)%avg
                 seedBase(s)                  = prop(s-1)%seedStart
+
+                print*, "============================================"
+                print*, "SAMPLE:      ", s
+                print*, "output_name         : ", trim(adjustL(output_name(s)))
+                print*, "bounding_box_bottom : ", xMinGlob(:,s)
+                print*, "bounding_box_top    : ", xMaxGlob(:,s)
+                print*, "correlation_length  : ", corrL(:,s)
+                print*, "correlation_model   : ",corrMod(s)
+                print*, "first-order_marginal: ", margiFirst(s)
+                print*, "average             : ", avg(s)
+                print*, "standard_deviation  : ", std_dev(s), "(CV=",std_dev(s)/avg(s),")"
+                print*, "random_seed         : ", seedBase(s)
+                print*, "  "
+
             end do
 
             if(allocated(prop)) deallocate(prop)
