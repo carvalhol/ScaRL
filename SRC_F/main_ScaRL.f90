@@ -359,7 +359,7 @@ program main_ScaRL
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
             !logical :: oneFile=.false.
-            logical :: oneFile=.true., oneDataSet=.false.
+            logical :: oneFile=.true., oneDataSet=.true.
             logical :: w_info_file=.false.
             logical :: delete_sample_file=.false.
             integer :: partition_type = 1
