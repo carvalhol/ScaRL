@@ -359,18 +359,6 @@ contains
         if(rank == 0) print*, "HDF5_name = ", trim(HDF5_name)
         if(any(Np_ovlp < 1)) stop ("When using write_hdf5_multi_proc_3D_1ds overlap should be >= 0")
 
-        if(rank /= 0) then
-            call MPI_RECV(cont, 1, MPI_INTEGER, rank-1, 0, comm, statut, error)
-            call MPI_SEND(randField_3D, size(randField_3D), MPI_DOUBLE_PRECISION, &
-                      0, 0, comm, error)
-            call MPI_SEND(xMax, 3, MPI_DOUBLE_PRECISION, &
-                      0, 2, comm, error)
-            call MPI_SEND(pos_0, 3, MPI_INTEGER, &
-                      0, 3, comm, error)
-            if(rank /= nb_procs-1) then
-            call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
-            end if
-        else
 
         !PREPARING ENVIROMENT
         ds_rank = 3
@@ -382,63 +370,80 @@ contains
         if(rank == 0) print*, "HDF5_path =", trim(HDF5_path)
 
         !HDF5 WRITING
-        call h5open_f(error) ! Initialize FORTRAN interface.
-        call h5fcreate_f(HDF5_path, H5F_ACC_TRUNC_F, file_id, error) !NEW file_id
-        call h5screate_simple_f(ds_rank, ds_size, filespace, error) !NEW filespace (the size of the whole table)
-        call h5dcreate_f(file_id, ds_name, H5T_NATIVE_DOUBLE, filespace, dset_id, error) !NEW dset_id
-        call h5screate_simple_f(ds_rank, local_size, memspace, error)  !NEW memspace
-        offset = pos_0 - 1
-        call h5sselect_none_f(filespace, error) !DESELECT everything 
-        call h5sselect_hyperslab_f (filespace, H5S_SELECT_SET_F, offset, local_size, error) !SET filespace (to the portion in the hyperslab)
+        if(rank /= 0) then
+            call MPI_RECV(cont, 1, MPI_INTEGER, &
+                      rank-1, 0, comm, statut, error)
+            call MPI_SEND(randField_3D, size(randField_3D), MPI_DOUBLE_PRECISION, &
+                      0, 0, comm, error)
+            call MPI_SEND(xMax, 3, MPI_DOUBLE_PRECISION, &
+                      0, 2, comm, error)
+            call MPI_SEND(pos_0, 3, MPI_INTEGER, &
+                      0, 3, comm, error)
+            if(rank /= nb_procs-1) then
+                call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
+            end if
+        else
+            call h5open_f(error) ! Initialize FORTRAN interface.
+            call h5fcreate_f(HDF5_path, H5F_ACC_TRUNC_F, file_id, error) !NEW file_id
+            call h5screate_simple_f(ds_rank, ds_size, filespace, error) !NEW filespace (the size of the whole table)
+            if(rank == 0) print*, "ds_size = ", ds_size
+            call h5dcreate_f(file_id, ds_name, H5T_NATIVE_DOUBLE, filespace, dset_id, error) !NEW dset_id
+            call h5screate_simple_f(ds_rank, local_size, memspace, error)  !NEW memspace
+            offset = pos_0 - 1
+            call h5sselect_none_f(filespace, error) !DESELECT everything 
+            call h5sselect_hyperslab_f (filespace, H5S_SELECT_SET_F, offset, local_size, error) !SET filespace (to the portion in the hyperslab)
 
-        call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, &
-                        randField_3D,  &
-                        local_size, error, &
-                        file_space_id = filespace, &
-                        mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
+            call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, &
+                            randField_3D,  &
+                            local_size, error, &
+                            file_space_id = filespace, &
+                            mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
 
-        call write_h5attr_real_vec(dset_id, "xMin", xMin)
+            call write_h5attr_real_vec(dset_id, "xMin", xMin)
+
+            if(nb_procs > 1) then 
+                call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
+                allocate(randField_3D_temp(size(randField_3D,1), &
+                                       size(randField_3D,2), &
+                                       size(randField_3D,3)))
+            end if
+
+
+            do i = 2, nb_procs
+                call MPI_RECV(randField_3D_temp, size(randField_3D_temp), MPI_DOUBLE_PRECISION, &
+                              i-1, 0, comm, statut, error)
+                call MPI_RECV(xMax_temp, 3, MPI_DOUBLE_PRECISION, &
+                              i-1, 2, comm, statut, error)
+                call MPI_RECV(pos_0_temp, 3, MPI_DOUBLE_PRECISION, &
+                              i-1, 3, comm, statut, error)
+                offset = pos_0_temp - 1
+                call h5sselect_none_f(filespace, error) !DESELECT everything 
+                call h5sselect_hyperslab_f (filespace, H5S_SELECT_SET_F, offset, local_size, error) !SET filespace (to the portion in the hyperslab)
+                
+                call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, &
+                                randField_3D_temp,  &
+                                local_size, error, &
+                                file_space_id = filespace, &
+                                mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
+
       
-        if(nb_procs > 1) then 
-            call MPI_SEND(cont, 1, MPI_INTEGER, rank+1, 0, comm, error)
-            allocate(randField_3D_temp(size(randField_3D,1), &
-                                   size(randField_3D,2), &
-                                   size(randField_3D,3)))
-        end if
+                if(i == nb_procs) call write_h5attr_real_vec(dset_id, "xMax", xMax_temp)
+            end do
 
-        do i = 2, nb_procs
-        call MPI_RECV(randField_3D_temp, size(randField_3D_temp), MPI_DOUBLE_PRECISION, &
-                      i-1, 0, comm, statut, error)
-        call MPI_RECV(xMax_temp, 3, MPI_DOUBLE_PRECISION, &
-                      i-1, 2, comm, statut, error)
-        call MPI_RECV(pos_0_temp, 3, MPI_DOUBLE_PRECISION, &
-                      i-1, 3, comm, statut, error)
-        offset = pos_0_temp - 1
-        call h5sselect_none_f(filespace, error) !DESELECT everything 
-        call h5sselect_hyperslab_f (filespace, H5S_SELECT_SET_F, offset, local_size, error) !SET filespace (to the portion in the hyperslab)
-        
-        call h5dwrite_f(dset_id, H5T_NATIVE_DOUBLE, &
-                        randField_3D_temp,  &
-                        local_size, error, &
-                        file_space_id = filespace, &
-                        mem_space_id = memspace) !Write dset, INPUT form = memspace, OUTPUT form = filespace
+            if(allocated(randField_3D_temp)) deallocate(randField_3D_temp)
+           
+            call write_pos_on_HDF5_dataset(dset_id, [1,1,1], L)
+            call h5sclose_f(memspace, error) !CLOSE memspace
+            call h5dclose_f(dset_id, error) !CLOSE dset_id
+            call h5sclose_f(filespace, error) !CLOSE filespace
+            
+            call h5fclose_f(file_id, error) !CLOSE file_id
+            call h5close_f(error) ! Close FORTRAN interface
 
-      
-        if(i == nb_procs) call write_h5attr_real_vec(dset_id, "xMax", xMax_temp)
-        end do
-        call write_pos_on_HDF5_dataset(dset_id, [1,1,1], L)
-        call h5sclose_f(memspace, error) !CLOSE memspace
-        call h5dclose_f(dset_id, error) !CLOSE dset_id
-        call h5sclose_f(filespace, error) !CLOSE filespace
-        
-        if(allocated(randField_3D_temp)) deallocate(randField_3D_temp)
-        call h5fclose_f(file_id, error) !CLOSE file_id
-        call h5close_f(error) ! Close FORTRAN interface
-
-        if(rank == 0) call write_XMF_elements(HDF5_name,           &
-                                xMin, xMax_temp, L, &
-                                XMF_name, res_folder, &
-                                ".", ds_name)
+            call write_XMF_elements(HDF5_name,           &
+                                    xMin, xMax_temp, L, &
+                                    XMF_name, res_folder, &
+                                    ".", ds_name)
 
         end if
         

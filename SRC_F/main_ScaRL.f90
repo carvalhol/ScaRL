@@ -69,13 +69,13 @@ program main_ScaRL
     end if
     call MPI_BARRIER (comm_group ,code)
 
+    do s = 1, nSamples !----------------------------
     time_toc = MPI_Wtime()
     time_count = 1
     time_label(time_count) = "Read_input"
     time_trace(time_count) = time_toc-time_tic
     time_tic = MPI_Wtime()
    
-    do s = 1, nSamples !----------------------------
     if(rank == 0) print*, "==================================================== "
     if(rank == 0) print*, "Generating SAMPLE ",s 
     if(rank == 0) print*, " "
@@ -375,6 +375,7 @@ program main_ScaRL
             double precision :: time_final
 
 
+            print*, "3L= ", L
             time_tic = MPI_Wtime()
             
             output_name = output_name_in
@@ -426,6 +427,7 @@ program main_ScaRL
             if(rank == 0) print *, "xRange (processor)  = ", xRange
             if(rank == 0) print *, "xRange (total)      = ", xMaxGlob - xMinGlob
 
+            print*, "2L= ", L
             seedStart = seedBase + 1
             if(seedBase < 0) then
                 !Stochastic Seed
@@ -444,6 +446,7 @@ program main_ScaRL
                                    xRange, corrL, &
                                    pointsPerCorrL, corrMod, &
                                    seedStart, rank)
+            print*, "4L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Generation"
@@ -455,6 +458,7 @@ program main_ScaRL
                                          partition_type, &
                                          topo_pos, topo_shape, &
                                          k_mtx)
+            print*, "5L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Apply_unit"
@@ -465,6 +469,7 @@ program main_ScaRL
            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                           nb_procs, topo_pos, topo_shape, &
                           comm_group)
+            print*, "6L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Add_overlap"
@@ -475,6 +480,7 @@ program main_ScaRL
            if(rank == 0) print*, "normalize_field " 
            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
                                 rank, comm_group, k_mtx)
+            print*, "7L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Normalize"
@@ -484,11 +490,13 @@ program main_ScaRL
            if(rank == 0) print*, "multivariateTransformation " 
            call multiVariateTransformation(avg, std_dev, margiFirst, &
                                            k_mtx)
+            print*, "8L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Multivar_trans"
             time_trace(time_count) = time_toc-time_tic
             time_tic = MPI_Wtime()
+            print*, "9L= ", L
            
            if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
@@ -498,6 +506,8 @@ program main_ScaRL
                HDF5_name = str_cat(output_name,".h5")
                XMF_name  = str_cat(output_name,".xmf")
                if(oneDataSet) then
+                   if(rank == 0) print*, "HDF5 - One File and One Dataset"
+                   print*, "1 L= ", L
                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
                                     coord_N,     &
                                     xMinGlob, xMaxGlob, &
@@ -510,6 +520,7 @@ program main_ScaRL
                                     rank, nb_procs,           &
                                     comm_group)
                else 
+                   if(rank == 0) print*, "HDF5 - One File and Several Datasets"
                    call write_hdf5_multi_proc_3D(coord_0, &
                                     coord_N,     &
                                     xMinGlob, xMaxGlob, &
@@ -529,6 +540,7 @@ program main_ScaRL
                                 L, Np, Np_ovlp, .false.)
                end if
            else
+               if(rank == 0) print*, "HDF5 - One File Per Proc and One Dataset"
                HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
                XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
                call write_hdf5_single_proc_3D(coord_0, &
