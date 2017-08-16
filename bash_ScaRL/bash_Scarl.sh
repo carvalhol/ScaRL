@@ -91,9 +91,11 @@ do
         sed -i -e "s/#NPROC/${procs[$ii]}/" ./run.pbs
         echo "(cd `(pwd)`; qsub run.pbs)" >> $vai
     elif [ "$run_system" -eq "2" ]; then
+        nselect=$((1+(${procs[$ii]}-1)/24))
+        
         cp $src_folder/run.slurm ./ 
-        sed -i -e "s/#NNODES/${procs[$ii]}/" ./run.slurm
-        sed -i -e "s/#NTASKSNODE/1/" ./run.slurm
+        sed -i -e "s/#NNODES/$nselect/" ./run.slurm
+        sed -i -e "s/#NTASKSNODE/24/" ./run.slurm
         sed -i -e "s/#NMPI/${procs[$ii]}/" ./run.slurm
         echo "(cd `(pwd)`; sbatch run.slurm)" >> $vai
     fi

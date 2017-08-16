@@ -31,7 +31,7 @@ export FFTW3_ROOT=/scratch/msgeo/lucio.correa/LOCAL/FFT
 export LD_LIBRARY_PATH=/scratch/msgeo/lucio.correa/LOCAL/FFTW/lib:$LD_LIBRARY_PATH
 
 #Configura o executavel
-EXEC=/scratch/msgeo/lucio.correa/ScaRL/build/ScaRL.exe
+EXEC=/scratch/msgeo/lucio.correa/Luciano_weak/build/ScaRL.exe
 
 #exibe informações sobre o executável
 /usr/bin/ldd $EXEC
