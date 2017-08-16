@@ -1,0 +1,28 @@
+ #Output Folder <string, in-between quotes>
+ "SAMPLES"
+ #Number of Samples <int>
+           1
+ #--------------------------------
+ #Sample name <string, in-between quotes>
+ "Sample_1"
+ #Coodinate Min (X,Y,Z) <double>
+  0.000000000000000E+000  0.000000000000000E+000  0.000000000000000E+000
+ #Coordinate Max (X, Y, Z) <double>
+   #MAX_X        #MAX_Y        #MAX_Z     
+ #Correlation Lenghts (X,Y,Z) <double>
+   1.00000000000000        1.00000000000000        1.00000000000000     
+ #Overlap (in correlation lengths)(X,Y,Z) <double>
+   5.00000000000000        5.00000000000000        5.00000000000000     
+ #Points per Correlation Length (X,Y,Z) <integer>
+           5           5           5
+ #Correlation Model: 1-Gaussian <int> 
+           1
+ #First-order marginal density: 1-Gaussian/2-Lognormal <int>
+           1
+ #Average <double>
+  0.000000000000000E+000
+ #Standard Deviation <double>
+   1.00000000000000     
+ #Random seed: <0-random (changes at every run)/>=0 deterministic
+          -1
+ #--------------------------------

@@ -11,12 +11,11 @@
 
 #chargement des modules
 module purge
-module load intel-compiler/15.0.1
-module load intel-mkl/11.2.1
-module load intel-mpi/5.0.2
-module load phdf5/1.8.15
-module load fftw/3.3.4-intelmpi5.0.2
-
+module load intel-compilers/16.0.3
+module load intel-mkl/11.3.3
+module load intel-mpi/5.1.2
+module load phdf5/1.8.17-IntelMPI
+module load fftw/3.3.4 
 
 #On se place dans le reportoire depuis lequel le job a ete soumis
 cd $PBS_O_WORKDIR

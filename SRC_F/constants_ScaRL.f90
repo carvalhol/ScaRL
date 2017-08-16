@@ -15,7 +15,7 @@ module constants_ScaRL
                           FFT = 4
     !Correlation Model
     integer, parameter :: cm_GAUSSIAN = 1, &
-                          cm_COS = 2
+                          cm_VON_KARMAN = 2
     !First-order Marginal Density
     integer, parameter :: fom_GAUSSIAN = 1, &
                           fom_LOGNORMAL = 2

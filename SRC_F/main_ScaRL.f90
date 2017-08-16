@@ -358,10 +358,12 @@ program main_ScaRL
             integer :: temp_rank
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
-            !logical :: oneFile=.false.
-            logical :: oneFile=.true., oneDataSet=.true.
-            logical :: w_info_file=.false.
-            logical :: delete_sample_file=.false.
+            logical :: oneFile=.false., oneDataSet=.true.
+            logical :: w_info_file=.true.
+            logical :: delete_sample_file=.true.
+            !logical :: oneFile=.true., oneDataSet=.true.
+            !logical :: w_info_file=.false.
+            !logical :: delete_sample_file=.false.
             integer :: partition_type = 1
             integer :: seedStart
             double precision, dimension(3) :: xRange, overlap
