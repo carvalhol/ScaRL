@@ -665,10 +665,10 @@ contains
         integer, intent(in) :: nb_procs
 
         !LOCAL
-        integer :: f_id, g_id, error
+        integer(kind=8) :: f_id, g_id, f_id2
+        integer :: error
         integer :: ii
         character(len=1024) :: HDF5_name, g_name = "/RF"
-        integer :: f_id2
 
         CALL h5open_f(error)
         
