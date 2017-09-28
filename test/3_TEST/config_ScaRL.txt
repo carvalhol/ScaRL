@@ -1,0 +1,12 @@
+#Generation method (1 = FFT)
+1
+#Create information file
+1
+#Delete sample in the end (0 = false, 1 = true)
+0
+#One File (0 = false, 1 = true)
+1
+#One hdf5 dataset (0 = false, 1 = true)
+1
+#Input file name
+"./input_ScaRL.txt"

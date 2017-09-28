@@ -42,6 +42,10 @@ program main_ScaRL
     integer :: s
     double precision :: time_tic, time_toc, time_init
 
+    integer :: gen_meth
+    logical :: c_info_file, d_sample, one_file, one_hdf_ds
+    character (len=1024) :: input_file
+
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
@@ -51,7 +55,11 @@ program main_ScaRL
 
     !if(rank == 0) 
     !print*, "COISA LINDA==================================================== "
-    call read_input_ScaRL("./input_ScaRL.txt", rank, &
+    call read_config_ScaRL("./config_ScaRL.txt", gen_meth, &
+                          c_info_file, d_sample, one_file, one_hdf_ds, &
+                          input_file, rank, comm_group) 
+
+    call read_input_ScaRL(input_file, rank, &
                           nSamples, output_folder, &
                           xMinGlob, xMaxGlob, &
                           corrL, corrMod, margiFirst, &
@@ -77,7 +85,7 @@ program main_ScaRL
     time_tic = MPI_Wtime()
    
     if(rank == 0) print*, "==================================================== "
-    if(rank == 0) print*, "Generating SAMPLE ",s 
+    if(rank == 0) print*, "Generating SAMPLE --",s 
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
     if(rank == 0) print*, " "
@@ -182,7 +190,9 @@ program main_ScaRL
                            comm_group, &
                            output_name(s), &
                            output_folder, &
-                           time_count, time_label, time_trace, time_init)
+                           time_count, time_label, time_trace, time_init, &
+                           gen_meth, &
+                           c_info_file, d_sample, one_file, one_hdf_ds)
    end if
 
     if(rank == 0) print*, " "
@@ -324,7 +334,9 @@ program main_ScaRL
                                  margiFirst, avg, std_dev, &
                                  comm_group, &
                                  output_name_in, res_folder, &
-                                 time_count, time_label, time_trace, time_init)
+                                 time_count, time_label, time_trace, time_init, &
+                                 gen_meth, &
+                                 c_info_file, d_sample, one_file, one_hdf_ds)
             implicit none
             !INPUT
             integer, dimension(3), intent(in) :: Np
@@ -341,6 +353,8 @@ program main_ScaRL
             double precision, intent(in) :: avg, std_dev
             character(len=*), intent(in) :: output_name_in, res_folder
             double precision, intent(in) :: time_init
+            integer, intent(in) :: gen_meth
+            logical, intent(in) :: c_info_file, d_sample, one_file, one_hdf_ds
 
             !OUTPUT
             integer, intent(inout) :: time_count 
@@ -358,11 +372,10 @@ program main_ScaRL
             integer :: temp_rank
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
-            logical :: oneFile=.false., oneDataSet=.true.
-            logical :: w_info_file=.true.
-            logical :: delete_sample_file=.true.
+            !logical :: one_file, one_hdf_ds
+            !logical :: c_info_file
+            !logical :: d_sample
             !logical :: oneFile=.true., oneDataSet=.true.
-            !logical :: w_info_file=.false.
             !logical :: delete_sample_file=.false.
             integer :: partition_type = 1
             integer :: seedStart
@@ -377,7 +390,7 @@ program main_ScaRL
             double precision :: time_final
 
 
-            print*, "3L= ", L
+            print*, "L= ", L
             time_tic = MPI_Wtime()
             
             output_name = output_name_in
@@ -504,10 +517,10 @@ program main_ScaRL
            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
            if(rank == 0) print*, "write HDF5 " 
-           if(oneFile) then 
+           if(one_file) then 
                HDF5_name = str_cat(output_name,".h5")
                XMF_name  = str_cat(output_name,".xmf")
-               if(oneDataSet) then
+               if(one_hdf_ds) then
                    if(rank == 0) print*, "HDF5 - One File and One Dataset"
                    print*, "1 L= ", L
                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
@@ -562,7 +575,7 @@ program main_ScaRL
                             L, Np, Np_ovlp, .false.)
            end if
 
-           if(rank==0 .and. (.not.(oneFile .and.oneDataSet))) then
+           if(rank==0 .and. (.not.(one_file .and. one_hdf_ds))) then
                if(rank == 0) print*, "WRITING GLOBAL XMF" 
                do temp_rank = 0, nb_procs-1
                    call get_topo_pos(temp_rank,  &
@@ -570,7 +583,7 @@ program main_ScaRL
                                      temp_topo_pos)
                    HDF5_list(temp_rank+1) = &
                     str_cat(output_name,"_proc_",trim(num2str(temp_rank,5)),".h5")
-                   if(oneFile)  HDF5_list(temp_rank+1) = &
+                   if(one_file)  HDF5_list(temp_rank+1) = &
                                  str_cat(output_name,".h5") 
                    temp_origin = (Np-Np_ovlp)*temp_topo_pos            
                    coord_0_list(:, temp_rank+1) = &
@@ -599,9 +612,9 @@ program main_ScaRL
                                    time_trace(1:time_count), &
                                    HDF5_name, &
                                    res_folder, &
-                                   rank, nb_procs, comm_group, oneFile)
+                                   rank, nb_procs, comm_group, one_file)
 
-           if(w_info_file) then
+           if(c_info_file) then
                if(rank==0) print*, "Writing INFO file"
 
                if(rank==0) then
@@ -645,7 +658,7 @@ program main_ScaRL
                                        oneFile=.true.)
            end if
 
-           if(delete_sample_file .and. rank == 0) then
+           if(d_sample .and. rank == 0) then
               print*, "WARNING!! Deleting sample files (only INFO files will stand)"
               call system("rm SAMPLES/S*")
            end if
