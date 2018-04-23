@@ -1,0 +1,59 @@
+#!/bin/bash
+
+#PBS -S /bin/bash
+#PBS -N verify
+#PBS -o out_verify.txt
+#PBS -j oe
+#PBS -l walltime=00:05:00
+#PBS -l select=1:ncpus=1:mem=5mb
+#PBS -M luciano.de-carvalho@centralesupelec.fr
+#PBS -q haswellq
+#PBS -P lmt
+
+# chargement des modules ===========================================
+module purge
+
+# ==================================================================
+
+#TEST
+#it_procs=0
+#it_size=0
+#END TEST
+
+cd $PBS_O_WORKDIR
+
+RUN_CHECK_FILE="/workdir/carvalho/RF_Test/BIG_TEST/AUTOTESTS/speedUp.sh"
+END_FILE="out_run.txt"
+END_MARKER=" EXIT CODE: OK "
+echo "RUN_CHECK_FILE = $RUN_CHECK_FILE"
+echo "it_procs       = $it_procs"
+echo "it_size        = $it_size"
+
+
+verification=-1 #file not found
+if [ -f $END_FILE ]; then
+    end_phrase=$(grep "." $END_FILE | tail -1)
+    echo "end_phrase ="$end_phrase
+    #printf "Reading: $1/fin_sem \n"
+    #while read -r check_line; do
+        #printf "check_line: $check_line \n"
+        if [[ "$end_phrase" = $END_MARKER ]]; then
+            printf "Calculation has ended succesfully \n"
+            verification=0 #calculation has ended
+        else
+            printf "Calculation has not ended \n"
+            it_size=$(expr $it_size + 1)
+            printf "Decreasing size. it_size=$it_size \n"
+            
+            verification=1 #calculation has not ended
+
+            #
+            
+            printf "Relaunching job: \n"
+            $RUN_CHECK_FILE $it_procs $it_size
+        fi
+    #done < $END_FILE
+else
+   printf "No $END_FILE founded. Automatic linking will not work\n"
+fi
+echo "Verification:  $verification"

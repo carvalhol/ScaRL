@@ -657,7 +657,9 @@ program main_ScaRL
 
            if(d_sample .and. rank == 0) then
               print*, "WARNING!! Deleting sample files (only INFO files will stand)"
-              call system("rm SAMPLES/S*")
+              !call system("rm SAMPLES/S*")
+              call system(str_cat("rm "//res_folder,"/",output_name,"*"))
+
            end if
            
            if(allocated(k_mtx)) deallocate(k_mtx)
@@ -813,19 +815,23 @@ program main_ScaRL
         double precision :: sumRF, sumRFsquare
         double precision :: totalSumRF, totalSumRFsquare
         integer(kind = 8) :: xNTotal
+        integer(kind = 8), dimension(3) :: topo_shape_8, Np_8, Np_ovlp_8
         integer :: code
 
         maxPos = Np
         where(topo_pos /= (topo_shape-1)) maxPos = Np - Np_ovlp
-        xNTotal = product((topo_shape*(Np-Np_ovlp)) +Np_ovlp)
+        topo_shape_8 = topo_shape
+        Np_8 = Np
+        Np_ovlp_8 = Np_ovlp
+        xNTotal = product((topo_shape_8*(Np_8-Np_ovlp_8))+Np_ovlp_8)
         if(rank==0) print*, "    Normalizing average and stdDev of Gaussian ensemble"
+        if(rank==0) print*, "    xNTotal = ", xNTotal
 
         !AVERAGE
         sumRF = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))) 
         call MPI_ALLREDUCE (sumRF,totalSumRF,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
         avg = totalSumRF/dble(xNTotal)
-        if(rank==0) print*, "    avg BEFORE = ", avg
         randField = randField - avg
 
         !VARIANCE
@@ -833,10 +839,13 @@ program main_ScaRL
         call MPI_ALLREDUCE (sumRFsquare,totalSumRFsquare,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
         std_dev = sqrt(totalSumRFsquare/dble(xNTotal))
+        if(rank==0) print*, "    sumRF       = ", sumRF
+        if(rank==0) print*, "    sumRFsquare = ", sumRFsquare
+        if(rank==0) print*, "    avg BEFORE = ", avg
         if(rank==0) print*, "    std_dev BEFORE = ", std_dev
         randField = randField/std_dev
-        if(rank==0) print*, "    avg AFTER = ", 0d0
-        if(rank==0) print*, "    std_dev AFTER = ", 1d0
+        if(rank==0) print*, "    avg AFTER (supposed) = ", 0d0
+        if(rank==0) print*, "    std_dev AFTER (supposed) = ", 1d0
                 
         end subroutine normalize_field
 
