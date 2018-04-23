@@ -362,7 +362,7 @@ program main_ScaRL
             double precision, dimension(:), intent(inout) :: time_trace
              
             !LOCAL
-            double precision, dimension(Np(1), Np(2), Np(3)) :: k_mtx
+            double precision, dimension(:, :, :), allocatable :: k_mtx
             character(len=1024) :: output_name, HDF5_name, XMF_name
             double precision, dimension(3) :: coord_0, coord_N
             integer         , dimension(3) :: pos_0, pos_N
@@ -372,11 +372,6 @@ program main_ScaRL
             integer :: temp_rank
             integer, dimension(3) :: temp_origin
             integer, dimension(3) :: temp_topo_pos
-            !logical :: one_file, one_hdf_ds
-            !logical :: c_info_file
-            !logical :: d_sample
-            !logical :: oneFile=.true., oneDataSet=.true.
-            !logical :: delete_sample_file=.false.
             integer :: partition_type = 1
             integer :: seedStart
             double precision, dimension(3) :: xRange, overlap
@@ -389,7 +384,7 @@ program main_ScaRL
             logical :: fileExists
             double precision :: time_final
 
-
+            allocate(k_mtx(Np(1), Np(2), Np(3)))
             print*, "L= ", L
             time_tic = MPI_Wtime()
             
@@ -442,7 +437,7 @@ program main_ScaRL
             if(rank == 0) print *, "xRange (processor)  = ", xRange
             if(rank == 0) print *, "xRange (total)      = ", xMaxGlob - xMinGlob
 
-            print*, "2L= ", L
+            !print*, "2L= ", L
             seedStart = seedBase + 1
             if(seedBase < 0) then
                 !Stochastic Seed
@@ -455,13 +450,15 @@ program main_ScaRL
             !print*, "Proc = ", rank, "seedStart = ", seedStart
             
             if(rank == 0) print*, "gen_std_gauss_FFT " 
-            !call gen_std_gauss_FFT(k_mtx, Np, &
-            !                       xRange, corrL, corrMod, seedStart)
-            call gen_std_gauss_Shino_FFT(k_mtx, Np, &
+            call gen_std_gauss_FFT(k_mtx, Np, &
                                    xRange, corrL, &
-                                   pointsPerCorrL, corrMod, &
+                                   corrMod, &
                                    seedStart, rank)
-            print*, "4L= ", L
+            !call gen_std_gauss_Shino_FFT(k_mtx, Np, &
+            !                       xRange, corrL, &
+            !                       pointsPerCorrL, corrMod, &
+            !                       seedStart, rank)
+            !print*, "4L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Generation"
@@ -473,7 +470,7 @@ program main_ScaRL
                                          partition_type, &
                                          topo_pos, topo_shape, &
                                          k_mtx)
-            print*, "5L= ", L
+            !print*, "5L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Apply_unit"
@@ -484,7 +481,7 @@ program main_ScaRL
            call add_overlap(k_mtx, Np, Np_ovlp, rank, &
                           nb_procs, topo_pos, topo_shape, &
                           comm_group)
-            print*, "6L= ", L
+            !print*, "6L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Add_overlap"
@@ -495,7 +492,7 @@ program main_ScaRL
            if(rank == 0) print*, "normalize_field " 
            call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
                                 rank, comm_group, k_mtx)
-            print*, "7L= ", L
+            !print*, "7L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Normalize"
@@ -505,13 +502,13 @@ program main_ScaRL
            if(rank == 0) print*, "multivariateTransformation " 
            call multiVariateTransformation(avg, std_dev, margiFirst, &
                                            k_mtx)
-            print*, "8L= ", L
+            !print*, "8L= ", L
             time_toc = MPI_Wtime()
             time_count = time_count + 1
             time_label(time_count) = "Multivar_trans"
             time_trace(time_count) = time_toc-time_tic
             time_tic = MPI_Wtime()
-            print*, "9L= ", L
+            !print*, "9L= ", L
            
            if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
            if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
@@ -522,7 +519,7 @@ program main_ScaRL
                XMF_name  = str_cat(output_name,".xmf")
                if(one_hdf_ds) then
                    if(rank == 0) print*, "HDF5 - One File and One Dataset"
-                   print*, "1 L= ", L
+                   !print*, "1 L= ", L
                    call write_hdf5_multi_proc_3D_1ds(coord_0, &
                                     coord_N,     &
                                     xMinGlob, xMaxGlob, &
@@ -662,6 +659,8 @@ program main_ScaRL
               print*, "WARNING!! Deleting sample files (only INFO files will stand)"
               call system("rm SAMPLES/S*")
            end if
+           
+           if(allocated(k_mtx)) deallocate(k_mtx)
         
         end subroutine create_fields
 
@@ -825,7 +824,7 @@ program main_ScaRL
         sumRF = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))) 
         call MPI_ALLREDUCE (sumRF,totalSumRF,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
-        avg = sumRF/dble(xNTotal)
+        avg = totalSumRF/dble(xNTotal)
         if(rank==0) print*, "    avg BEFORE = ", avg
         randField = randField - avg
 
@@ -833,7 +832,7 @@ program main_ScaRL
         sumRFsquare = sum(randField(1:maxPos(1),1:maxPos(2),1:maxPos(3))**2d0)
         call MPI_ALLREDUCE (sumRFsquare,totalSumRFsquare,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
-        std_dev = sqrt(sumRFsquare/dble(xNTotal))
+        std_dev = sqrt(totalSumRFsquare/dble(xNTotal))
         if(rank==0) print*, "    std_dev BEFORE = ", std_dev
         randField = randField/std_dev
         if(rank==0) print*, "    avg AFTER = ", 0d0
@@ -884,7 +883,7 @@ program main_ScaRL
         double precision, dimension(:,:,:), intent(inout) :: RF
 
         !LOCAL
-        double precision, dimension(Np(1), Np(2), Np(3)) :: RF_temp1, RF_temp2
+        double precision, dimension(:, :, :), allocatable :: RF_temp1, RF_temp2
         integer, dimension(27) :: neigh_rank, op_neigh_rank
         integer, dimension(3,27) :: neigh_shift
         integer, dimension(-1:1,-1:1,-1:1) :: dir_index
@@ -906,6 +905,9 @@ program main_ScaRL
         integer :: BufDT_size
         integer :: ii, jj, kk, cnt
         integer :: rang_test=-1,r_sender = 1, r_receiver = 6
+
+        allocate(RF_temp1(Np(1), Np(2), Np(3)))
+        allocate(RF_temp2(Np(1), Np(2), Np(3)))
 
         !Defining neighbours
         cnt = 0
@@ -1078,6 +1080,8 @@ program main_ScaRL
         call MPI_BUFFER_DETACH (buffer,BufDT_size,code)
         
         if(allocated(buffer)) deallocate(buffer)
+        if(allocated(RF_temp1)) deallocate(RF_temp1)
+        if(allocated(RF_temp2)) deallocate(RF_temp2)
 
     end subroutine add_overlap
 
@@ -1102,9 +1106,10 @@ program main_ScaRL
         double precision, dimension(:), allocatable :: pattern
         integer, dimension(3) :: U_Lim, D_Lim
         logical :: considerNeighbour
-        double precision, dimension(Np(1), Np(2), Np(3)) :: unityPartition
+        double precision, dimension(:, :, :), allocatable :: unityPartition
         integer :: shift
 
+        allocate(unityPartition(Np(1), Np(2), Np(3)))
         unityPartition = 1.0D0
     
         !print*, "apply_UnityPartition_mtx = ", pattern
@@ -1167,6 +1172,7 @@ program main_ScaRL
         randField_3D = randField_3D * sqrt(unityPartition)
     
         if(allocated(pattern)) deallocate(pattern)
+        if(allocated(unityPartition)) deallocate(unityPartition)
     
     end subroutine apply_UnityPartition_Mtx
 

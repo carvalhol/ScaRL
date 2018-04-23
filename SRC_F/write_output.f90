@@ -665,7 +665,7 @@ contains
         integer, intent(in) :: nb_procs
 
         !LOCAL
-        integer(kind=8) :: f_id, g_id, f_id2
+        integer(HID_T) :: f_id, g_id, f_id2
         integer :: error
         integer :: ii
         character(len=1024) :: HDF5_name, g_name = "/RF"

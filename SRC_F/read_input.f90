@@ -39,63 +39,66 @@ contains
             integer :: fid, tmp_int
             integer :: s, error, code
             character(len=1024) :: buffer
-            
-            if(fileExist(config_file)) then
+           
+             
+            if(rank == 0) then
+                if(fileExist(config_file)) then
 
-                if(rank == 0) then
-                     print*, "WARNING: '"//trim(adjustL(config_file))//"' found"   
-                fid = 50 
-                open (unit = fid , file = config_file, action = 'read', iostat=error)
+                    print*, "WARNING: '"//trim(adjustL(config_file))//"' found"   
+                    fid = 50 
+                    open (unit = fid , file = config_file, action = 'read', iostat=error)
+                    
+                    buffer = getLine(fid, '#') !generation method
+                    read(buffer,*) gen_meth
+                    buffer = getLine(fid, '#') !create info_file
+                    read(buffer,*) tmp_int
+                    c_info_file = .false.
+                    if(tmp_int==1) c_info_file = .true.
+                    buffer = getLine(fid, '#') !delete sample
+                    read(buffer,*) tmp_int
+                    d_sample = .false.
+                    if(tmp_int==1) d_sample = .true.
+                    buffer = getLine(fid, '#') !one file output
+                    read(buffer,*) tmp_int
+                    one_file = .false.
+                    if(tmp_int==1) one_file = .true.
+                    buffer = getLine(fid, '#') !one hdf dataset
+                    read(buffer,*) tmp_int
+                    one_hdf_ds = .false.
+                    if(tmp_int==1) one_hdf_ds = .true.
+                    buffer = getLine(fid, '#') !input file
+                    read(buffer,*) input_file
+                    
+                    close (fid)       
                 
-                buffer = getLine(fid, '#') !generation method
-                read(buffer,*) gen_meth
-                buffer = getLine(fid, '#') !create info_file
-                read(buffer,*) tmp_int
-                c_info_file = .false.
-                if(tmp_int==1) c_info_file = .true.
-                buffer = getLine(fid, '#') !delete sample
-                read(buffer,*) tmp_int
-                d_sample = .false.
-                if(tmp_int==1) d_sample = .true.
-                buffer = getLine(fid, '#') !one file output
-                read(buffer,*) tmp_int
-                one_file = .false.
-                if(tmp_int==1) one_file = .true.
-                buffer = getLine(fid, '#') !one hdf dataset
-                read(buffer,*) tmp_int
-                one_hdf_ds = .false.
-                if(tmp_int==1) one_hdf_ds = .true.
-                buffer = getLine(fid, '#') !input file
-                read(buffer,*) input_file
-                
-                close (fid)
+                else
+                    print*, "FILE: '"//trim(adjustL(config_file))//"' not found. Taking default parameters."   
+                    gen_meth = 1 !FFT
+                    c_info_file = .false.
+                    d_sample = .false.
+                    one_file = .true.
+                    one_hdf_ds = .true. 
+                    input_file = "./input_ScaRL.txt"
 
                 end if
-                
-                call MPI_BCAST (gen_meth,1, MPI_INTEGER, 0, comm_group, code)
-                call MPI_BCAST (c_info_file,1, MPI_LOGICAL, 0, comm_group, code)
-                call MPI_BCAST (d_sample,1, MPI_LOGICAL, 0, comm_group, code)
-                call MPI_BCAST (one_file,1, MPI_LOGICAL, 0, comm_group, code)
-                call MPI_BCAST (one_hdf_ds,1, MPI_LOGICAL, 0, comm_group, code)
-                call MPI_BCAST (input_file, len(input_file), MPI_CHARACTER, 0, comm_group, code)
-            
-            else
-                gen_meth = 1 !FFT
-                c_info_file = .false.
-                d_sample = .false.
-                one_file = .true.
-                one_hdf_ds = .true. 
-                input_file = "./config_ScaRL.txt"
-
-            end if
-
-            print*, "gen_meth    = ", gen_meth
-            print*, "c_info_file = ", c_info_file
-            print*, "d_sample    = ", d_sample
-            print*, "one_file    = ", one_file
-            print*, "one_hdf_ds  = ", one_hdf_ds
-            print*, "input_file  = ", trim(adjustL(input_file))
+             end if
              
+             call MPI_BCAST (gen_meth,1, MPI_INTEGER, 0, comm_group, code)
+             call MPI_BCAST (c_info_file,1, MPI_LOGICAL, 0, comm_group, code)
+             call MPI_BCAST (d_sample,1, MPI_LOGICAL, 0, comm_group, code)
+             call MPI_BCAST (one_file,1, MPI_LOGICAL, 0, comm_group, code)
+             call MPI_BCAST (one_hdf_ds,1, MPI_LOGICAL, 0, comm_group, code)
+             call MPI_BCAST (input_file, len(input_file), MPI_CHARACTER, 0, comm_group, code)
+
+            if(rank == 0) then
+                print*, "gen_meth    = ", gen_meth
+                print*, "c_info_file = ", c_info_file
+                print*, "d_sample    = ", d_sample
+                print*, "one_file    = ", one_file
+                print*, "one_hdf_ds  = ", one_hdf_ds
+                print*, "input_file  = ", trim(adjustL(input_file))
+            end if 
+        
         end subroutine read_config_ScaRL
         
         !--------------------------------------------------------------
@@ -546,8 +549,8 @@ contains
         logical :: fileExists
 
         inquire(file=filePath, exist=fileExists)
-        print*, "file : ", trim(adjustL(filePath))
-        print*, "exists?", fileExists
+        !print*, "file : ", trim(adjustL(filePath))
+        !print*, "exists?", fileExists
 
     end function fileExist
 end module read_input
