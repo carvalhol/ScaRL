@@ -105,6 +105,53 @@ contains
         !--------------------------------------------------------------
         !--------------------------------------------------------------
         !--------------------------------------------------------------
+        subroutine read_extra_config_ScaRL(x_config_file, extra_config, &
+                                           topo_shape_in, &
+                                           rank, comm_group) 
+            implicit none
+            !INPUT
+            character(len=*), intent(in) :: x_config_file
+            integer, intent(in) :: rank
+            integer, intent(in) :: comm_group
+            !OUTPUT
+            logical, intent(out) :: extra_config
+            integer, dimension(3), intent(out)  :: topo_shape_in
+            !LOCAL
+            integer :: fid, tmp_int
+            integer :: s, error, code
+            character(len=1024) :: buffer
+           
+             
+            topo_shape_in = -1
+            extra_config = .false.
+
+            if(rank == 0) then
+                if(fileExist(x_config_file)) then
+
+                    
+                    print*, "WARNING: '"//trim(adjustL(x_config_file))//"' found"   
+                    fid = 50 
+                    open (unit = fid , file = x_config_file, action = 'read', iostat=error)
+                    extra_config=.true.
+                    buffer = getLine(fid, '#') !topology
+                    read(buffer,*) topo_shape_in
+                    
+                    close (fid)       
+                
+                    print*, "topo_shape_in    = ", topo_shape_in
+
+                end if
+             end if
+             
+             call MPI_BCAST (topo_shape_in,3, MPI_INTEGER, 0, comm_group, code)
+             call MPI_BCAST (extra_config,1, MPI_LOGICAL, 0, comm_group, code)
+        
+        end subroutine read_extra_config_ScaRL
+        
+        !--------------------------------------------------------------
+        !--------------------------------------------------------------
+        !--------------------------------------------------------------
+        !--------------------------------------------------------------
         !--------------------------------------------------------------
         !--------------------------------------------------------------
         !--------------------------------------------------------------

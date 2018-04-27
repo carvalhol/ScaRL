@@ -4,11 +4,11 @@
 #PBS -N ScaRL
 #PBS -o out_run.txt
 #PBS -j oe
-#PBS -l walltime=00:30:00
+#PBS -l walltime=#WALLTIME#
 #PBS -l select=#NSELECT#:ncpus=#NPROCS#:mem=#MEMmb#mb
 #PBS -M toto@your_mail.fr
-#PBS -q haswellq
-#PBS -P omaha
+#PBS -q #QUEUE#
+#PBS -P lmt
 
 # chargement des modules
 #chargement des modules
@@ -29,4 +29,4 @@ cd $PBS_O_WORKDIR
 #nb_nodes=`cat mpd.hosts|wc -l`
 
 echo "Running ScaRL"
-mpirun -np #NPROCSTOTAL# /home/carvalhol/ScaRL/build/ScaRL.exe
+mpirun -np #NPROCSTOTAL# /home/carvalho/ScaRL/build/ScaRL.exe

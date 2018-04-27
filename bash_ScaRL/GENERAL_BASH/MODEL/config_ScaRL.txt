@@ -1,0 +1,6 @@
+1 #Generation method: 1=FFT
+1 #Create information file: 0=false/1=true
+1 #Delete sample in the end: 0=false/1=true
+0 #Only one output file for all processors: 0=false/1=true
+0 #Only one HDF5 dataset: 0=false/1=true
+"./input_ScaRL.txt" #Input file: in between quotes string

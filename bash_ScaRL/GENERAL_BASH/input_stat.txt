@@ -1,0 +1,4 @@
+1 #Number of Samples
+1 #Calculate Correlation Legth
+0 #Delete Sample In The End
+"/workdir/carvalho/RF_Test/BIG_TEST/STAT_OVLP/BIG-P004-SZ150/SAMPLES/BIG_Sample_proc_00000.h5"

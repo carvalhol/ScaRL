@@ -1,0 +1,122 @@
+#!/bin/bash
+
+#PBS -S /bin/bash
+#PBS -N #JOBNAME#
+#PBS -o #OUTPUTFILE#
+#PBS -j oe
+#PBS -l walltime=#WALLTIME#
+#PBS -l select=#NSELECT#:ncpus=#NPROCS#:mem=#MEMmb#mb
+#PBS -M toto@your_mail.fr
+#PBS -q #QUEUE#
+#PBS -P lmt
+
+# chargement des modules
+#chargement des modules
+module purge
+module load intel-compilers/17.0.4      
+module load intel-mkl/11.3.3
+module load intel-mpi/5.1.2
+#module load phdf5/1.8.17-IntelMPI
+module load phdf5/1.8.17-IntelMPI-bis
+module load fftw/3.3.4 
+
+
+# On se place dans le repertoire depuis lequel le job a ete soumis
+cd $PBS_O_WORKDIR
+
+np=#NPROCS#;
+ns=#NSELECT#;
+npt=#NPROCSTOTAL#;
+nmem=#MEMmb#
+sz_init=#INIT_SIZE#;
+sz_increment=#INCREMENT#
+max_count=#MAX_COUNT#
+exit_when_ok=#EXIT_WHEN_OK#
+model_folder="#MODEL_FOLDER#"
+tests_folder="#TESTS_FOLDER#"
+exec_path="#EXEC_PATH#"
+output_file="#OUTPUTFILE#"
+folder_prefix="#FOLDERPREFIX#"
+
+printf "nPROCS       =$np\n"
+printf "nSELECT      =$ns\n"
+printf "nPROCSTOTAL  =$npt\n"
+printf "nMEMORY      =$nmem\n"
+printf "sz_init      =$sz_init\n"
+printf "sz_increment =$sz_increment\n"
+printf "max_count    =$max_count\n"
+printf "exit_when_ok =$exit_when_ok\n"
+
+
+verification=-1
+count=0
+nit=0;
+
+
+while [ $verification -ne 0 ]; do
+
+    printf "\n#########################################\n"
+    printf "\nITERATION    =$nit\n"
+    count=$(expr $count + 1)
+    if [ $count -gt  $max_count ]; then
+        printf "count > max_count : STOP! NO MORE ITERATIONS\n"
+        exit 2
+    fi
+    
+    #sz=$(expr $sz_init + $nit \* $sz_increment) #TODO MAKE IT A FLOAT
+    sz=$(echo $sz_init + $nit \* $sz_increment | bc) #TODO MAKE IT A FLOAT
+    int_sz=${sz%.*}    
+    #CREATING FOLDERS
+    folder_name=$(printf "$folder_prefix-P%03d_SZ%03d" $npt $int_sz)
+    echo "CHANGING SIZE IN FOLDER $tests_folder/$folder_name"
+    mkdir -p $tests_folder/$folder_name
+    cp $model_folder/* $tests_folder/$folder_name/
+   
+    
+    cd $tests_folder/$folder_name
+        
+        #MODIFIYNG SIZE
+        to_find=#SIZE#
+        replace_by=$sz
+        in_file="input_ScaRL.txt"
+        sed -i -e "s/$to_find/$replace_by/g" $in_file
+
+
+        #RUNNING
+        echo "Running ScaRL"
+        output_path=$(printf "$model_folder/$output_file") 
+        mpirun -np $npt $exec_path >> $output_file
+        echo "     nProcs=$npt, size=$sz, mem=$nmem"        
+
+        #VERIFYING
+        echo "Running Verification"
+        END_MARKER=" EXIT CODE: OK "
+        verification=-2 #output file not found
+        if [ -f $output_file ]; then
+            end_phrase=$(grep "." $output_file | tail -1)
+            echo "    end_phrase ="$end_phrase
+            if [[ "$end_phrase" = $END_MARKER ]]; then
+                printf "    Calculation has ended succesfully \n"
+                if [ $exit_when_ok -eq 1 ]; then
+                    verification=0 #calculation has ended, STOP
+                    exit 0
+                else
+                    printf "   $count of $max_count \n" #calculation has ended but must reiterate
+                    nit=$(expr $nit + 1)
+                fi
+            else
+                printf "    Calculation has not ended \n"
+                nit=$(expr $nit - 1)
+                printf "    Decreasing size. iteration =$nit \n"
+                verification=1 #calculation has not ended
+                printf "    Relaunching job: \n"
+            fi
+        else
+           printf "No $output_file founded. Calculation will STOP\n"
+           exit -2
+        fi
+        
+        echo "Verification:  $verification"
+
+    cd ~-
+done

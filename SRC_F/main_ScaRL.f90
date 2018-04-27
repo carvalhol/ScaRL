@@ -45,7 +45,8 @@ program main_ScaRL
     integer :: gen_meth
     logical :: c_info_file, d_sample, one_file, one_hdf_ds
     character (len=1024) :: input_file
-
+    integer, dimension(3) :: topo_shape_in
+    logical ::extra_config
     !Initializing MPI
     call init_communication(MPI_COMM_WORLD, comm_group, rank, nb_procs)
 
@@ -68,6 +69,8 @@ program main_ScaRL
                           avg, std_dev, overlap, &
                           pointsPerCorrL, comm_group)
     
+    call read_extra_config_ScaRL("extra_config_ScaRL.txt", extra_config, &
+                                 topo_shape_in, rank, comm_group)
     !print*, "COISA LINDA 2==================================================== "
     
     !Creating Output Folder 
@@ -97,7 +100,6 @@ program main_ScaRL
     !Defining L, Np_ovlp and xStep (Np stands for Number of points)
     xStep   = corrL(:,s)/(dble(pointsPerCorrL(:,s)-1))  
     !print*, "xStep = ", xStep
-    !L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))*(pointsPerCorrL(:,s)-1)
     L       = 1+ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/xStep)
     !print*, "xMaxGlob(:,s)-xMinGlob(:,s) = ", xMaxGlob(:,s)-xMinGlob(:,s)
     !print*, "ceiling = ", ceiling((xMaxGlob(:,s)-xMinGlob(:,s))/corrL(:,s))
@@ -110,11 +112,16 @@ program main_ScaRL
     !print *, "xMaxGlob   =", L
     !print *, "L          =", L
     !Finding place in topology and defining the number of points per processor (Np)
-    call decide_topo_shape(nb_procs, L, Np_ovlp, &
+    if(extra_config) then
+        if( product(topo_shape_in) /= nb_procs ) stop 'ERROR! extra_config_ScaRL.txt found but procs grid dimensions do not agree with the total number of procs in MPI process'
+        topo_shape = topo_shape_in 
+    else 
+        call decide_topo_shape(nb_procs, L, Np_ovlp, &
                            pointsPerBlockIdeal, & 
                            topo_shape, rank)
-    
-    !print *, "L2         =", L
+    end if
+    !topo_shape(:) = [2, 2, 2]
+    !print *, "FORCING TOPO SHAPE FOR TESTS         =", topo_shape
     !Changing to keep only procs used in this topology
     nb_procs_tmp = nb_procs
     nb_procs = product(topo_shape)
@@ -839,11 +846,15 @@ program main_ScaRL
         call MPI_ALLREDUCE (sumRFsquare,totalSumRFsquare,1,MPI_DOUBLE_PRECISION, &
                             MPI_SUM,comm_group,code)
         std_dev = sqrt(totalSumRFsquare/dble(xNTotal))
-        if(rank==0) print*, "    sumRF       = ", sumRF
-        if(rank==0) print*, "    sumRFsquare = ", sumRFsquare
-        if(rank==0) print*, "    avg BEFORE = ", avg
-        if(rank==0) print*, "    std_dev BEFORE = ", std_dev
         randField = randField/std_dev
+        print*, "    loc_sumRF       rank ", rank, "  = ", sumRF
+        print*, "    loc_sumRFsquare rank ", rank, "  = ", sumRFsquare
+        !if(rank==0) print*, "    loc_sumRF        = ", sumRF
+        !if(rank==0) print*, "    loc_sumRFsquare  = ", sumRFsquare
+        if(rank==0) print*, "    glob_sumRF       = ", totalsumRF
+        if(rank==0) print*, "    glob_sumRFsquare = ", totalsumRFsquare
+        if(rank==0) print*, "    avg BEFORE       = ", avg
+        if(rank==0) print*, "    std_dev BEFORE   = ", std_dev
         if(rank==0) print*, "    avg AFTER (supposed) = ", 0d0
         if(rank==0) print*, "    std_dev AFTER (supposed) = ", 1d0
                 
@@ -904,7 +915,8 @@ program main_ScaRL
         integer, dimension(3) :: dirShift
         integer(kind=8) :: nOvlpMax
         integer :: code
-        integer :: double_size
+        integer(kind=8):: double_size
+        integer :: double_size_short
         integer(kind=8) :: totalSize, overHead, overEst, bufferSize
         double precision, dimension(:), allocatable :: buffer
         integer :: request
@@ -968,14 +980,25 @@ program main_ScaRL
             maxP(:) = Np
             where(neigh_shift(:,dir) == 1 ) minP = Np - Np_ovlp + 1
             where(neigh_shift(:,dir) == -1) maxP = Np_ovlp
-            if(all(maxP > minP)) nOvlpMax = nOvlpMax + product(maxP - minP +1)
+            if(all(maxP > minP)) nOvlpMax = nOvlpMax + product(int(maxP,8) - int(minP,8) +1)
         end do
 
         !Buffer allocation
         overEst = 2
-        call MPI_TYPE_SIZE(MPI_DOUBLE_PRECISION,double_size,code)
-        overHead = int(1+(MPI_BSEND_OVERHEAD)/double_size)
+        call MPI_TYPE_SIZE(MPI_DOUBLE_PRECISION,double_size_short,code)
+        double_size = double_size_short
+        overHead = 1+int(MPI_BSEND_OVERHEAD,8)/double_size
         bufferSize = overEst*(nOvlpMax+overHead)
+        if(int(double_size*bufferSize) < 0) then
+            print*, "ERROR!!!!  Overflow of buffer_MPI (>2147483647, for INT_32)"
+            print*, "    Points per processor      = ", Np
+            print*, "    Overlap points            = ", Np_ovlp
+            print*, "    Total points in overlap   = ", nOvlpMax
+            print*, "    overHead                  = ", overHead
+            print*, "    buffer_MPI                = ", bufferSize*double_size
+            print*, "    buffer_MPI/max_buffer_MPI = ", 100d0*dble(bufferSize*double_size)/(2e9),"%"
+            stop ">>> Consider reducing the overlaping zone or using more processors"
+        end if
         allocate(buffer(bufferSize))
         call MPI_BUFFER_ATTACH(buffer, int(double_size*bufferSize),code)
         if(code /= 0) then

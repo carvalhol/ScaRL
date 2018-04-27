@@ -190,10 +190,10 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
     call random_seed(size = seedSz)
     allocate(seedVec(seedSz))
     if(seed >= 0) then
-        seedVec = seed
+        seedVec = seed + rank
     else
         call system_clock(COUNT=clock)
-        seedVec = clock + 37*(/ (ii - 1, ii = 1, seedSz) /) 
+        seedVec = 100*rank + clock + 37*(/ (ii - 1, ii = 1, seedSz) /) 
     end if 
     call random_seed(put=seedVec)
     call random_number(gammaK) 
