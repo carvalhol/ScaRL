@@ -1,0 +1,35 @@
+#!/bin/bash
+
+#PBS -S /bin/bash
+#PBS -N WEAK
+#PBS -o out_run.txt
+#PBS -j oe
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=8:mem=10000mb
+#PBS -M toto@your_mail.fr
+#PBS -q ivyq
+#PBS -P omaha
+
+# chargement des modules
+#chargement des modules
+module purge
+#module load intel-compilers/16.0.3
+module load intel-compilers/17.0.4      
+module load intel-mkl/11.3.3
+module load intel-mpi/5.1.2
+#module load phdf5/1.8.17-IntelMPI
+module load phdf5/1.8.17-IntelMPI-bis
+#module load fftw/3.3.4 
+module load loc/fftw/3.3.7 
+echo "ACTIVE MODULES"
+module list
+#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/carvalho/LOCAL_LIB/fftw/3.3.7/lib
+
+# On se place dans le repertoire depuis lequel le job a ete soumis
+cd $PBS_O_WORKDIR
+
+#cat $PBS_NODEFILE | uniq > mpd.hosts
+#nb_nodes=`cat mpd.hosts|wc -l`
+
+echo "Running ScaRL"
+mpirun -np 8 /home/carvalho/ScaRL/build/ScaRL.exe

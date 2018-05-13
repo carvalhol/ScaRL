@@ -362,20 +362,20 @@ program main_Stat
                 counter = counter +1
                 !nPoints = nPointsBase + (nBlocks - 1)*2*nPointsOvlp
                 nPoints = nPointsBase
-                !write(*,*) "nPoints = ", nPoints
+               write(*,*) "nPoints = ", nPoints
 
                 !nBlocks = ceiling(nPoints/200)
 
                 ratio = ceiling(dble(nPoints)/dble(nBlocks))
-                !write(*,*) "ratio = ", ratio
+               write(*,*) "ratio = ", ratio
 
                 where(ratio > 200) nBlocks = nBlocks + 1
-                !write(*,*) "nBlocks = ", nBlocks
+               write(*,*) "nBlocks = ", nBlocks
 
                 ratio = ceiling(dble(nPoints)/dble(nBlocks))
 
-                if(all(ratio < 200)) nFieldsOK = .true.
-                if(counter > 100) stop "nBlocksIdeal did NOT converge"
+                if(all(ratio <= 200)) nFieldsOK = .true.
+                if(counter > 20) stop "nBlocksIdeal did NOT converge"
             end do
 
             nBlocksIdeal = nBlocks

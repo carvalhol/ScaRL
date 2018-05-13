@@ -357,7 +357,7 @@ contains
 
         if(rank == 0) print*, "write_hdf5_multi_proc_3D_1ds"
         if(rank == 0) print*, "HDF5_name = ", trim(HDF5_name)
-        if(any(Np_ovlp < 1)) stop ("When using write_hdf5_multi_proc_3D_1ds overlap should be >= 0")
+        !if(any(Np_ovlp < 1)) stop ("When using write_hdf5_multi_proc_3D_1ds overlap should be >= 0")
 
 
         !PREPARING ENVIROMENT

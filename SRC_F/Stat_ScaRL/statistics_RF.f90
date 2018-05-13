@@ -271,7 +271,10 @@ contains
         double complex  , dimension(:,:,:), pointer :: Sk_3D
         integer*8 plan
         integer(kind=8) :: sizeDir, i, j, k
-
+        double complex, dimension(:), allocatable :: tukey1, tukey2, tukey3
+        double complex, dimension(:), allocatable :: trans1, trans2, trans3
+        double precision :: ratio
+        double precision, parameter :: r_tukey=0.1
         SkVec = (randFieldVec - avg)/stdDev; !Field normalization
 
         !write(*,*) "Centered RF = ", real(SkVec(1:10))
@@ -313,33 +316,73 @@ contains
 
 
         else if(nDim == 3) then
+            allocate(tukey1(xNStep(1)))
+            allocate(tukey2(xNStep(2)))
+            allocate(tukey3(xNStep(3)))
+            allocate(trans1(xNStep(1)))
+            allocate(trans2(xNStep(2)))
+            allocate(trans3(xNStep(3)))
+            tukey1 = 1d0
+            do i = 1, xNStep(1)
+                ratio = dble(i-1)/dble(xNStep(1)-1)
+                if (ratio < r_tukey) then
+                    tukey1(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-r_tukey/2d0)))
+                else if (ratio > r_tukey) then
+                    tukey1(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-1d0+r_tukey/2d0)))
+                end if
+            end do
+            tukey2 = 1d0
+            do i = 1, xNStep(2)
+                ratio = dble(i-1)/dble(xNStep(2)-1)
+                if (ratio < r_tukey) then
+                    tukey2(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-r_tukey/2d0)))
+                else if (ratio > r_tukey) then
+                    tukey2(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-1d0+r_tukey/2d0)))
+                end if
+            end do
+            tukey3 = 1d0
+            do i = 1, xNStep(3)
+                ratio = dble(i-1)/dble(xNStep(3)-1)
+                if (ratio < r_tukey) then
+                    tukey3(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-r_tukey/2d0)))
+                else if (ratio > r_tukey) then
+                    tukey3(i) = 1d0/2d0*(1+cos(2d0*PI/r_tukey*(ratio-1d0+r_tukey/2d0)))
+                end if
+            end do
+
             if(dir == 1) then
                 do j = 1, xNStep(2)
                     do k = 1, xNStep(3)
-                        call dfftw_plan_dft_1d(plan, sizeDir, Sk_3D(:,j,k), Sk_3D(:,j,k), &
+                        trans1 = Sk_3D(:,j,k) * tukey1
+                        call dfftw_plan_dft_1d(plan, sizeDir, trans1, trans1, &
                             FFTW_FORWARD, FFTW_ESTIMATE)
-                        call dfftw_execute_dft(plan, Sk_3D(:,j,k), Sk_3D(:,j,k))
+                        call dfftw_execute_dft(plan, trans1, trans1)
                         call dfftw_destroy_plan(plan)
+                        Sk_3D(:,j,k) = trans1
                     end do
                 end do
 
             else if(dir == 2) then
                 do i = 1, xNStep(1)
                     do k = 1, xNStep(3)
-                        call dfftw_plan_dft_1d(plan, sizeDir, Sk_3D(i,:,k), Sk_3D(i,:,k), &
+                        trans2 = Sk_3D(i,:,k) * tukey2
+                        call dfftw_plan_dft_1d(plan, sizeDir,trans2, trans2, &
                             FFTW_FORWARD, FFTW_ESTIMATE)
-                        call dfftw_execute_dft(plan, Sk_3D(i,:,k), Sk_3D(i,:,k))
+                        call dfftw_execute_dft(plan, trans2, trans2)
                         call dfftw_destroy_plan(plan)
+                        Sk_3D(i,:,k) = trans2
                     end do
                 end do
 
             else if(dir == 3) then
                 do i = 1, xNStep(1)
                     do j = 1, xNStep(2)
-                        call dfftw_plan_dft_1d(plan, sizeDir, Sk_3D(i,j,:), Sk_3D(i,j,:), &
+                        trans3 = Sk_3D(i,j,:) * tukey3
+                        call dfftw_plan_dft_1d(plan, sizeDir, trans3, trans3, &
                             FFTW_FORWARD, FFTW_ESTIMATE)
-                        call dfftw_execute_dft(plan, Sk_3D(i,j,:), Sk_3D(i,j,:))
+                        call dfftw_execute_dft(plan, trans3, trans3)
                         call dfftw_destroy_plan(plan)
+                        Sk_3D(i,j,:) = trans3
                     end do
                 end do
             end if

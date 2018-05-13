@@ -8,11 +8,9 @@ module constants_ScaRL
     double precision, parameter :: TOLERANCE = 0.000000001
     double precision, parameter :: MIN_DOUBLE = -2.0D+307
     double precision, parameter :: MAX_DOUBLE = 2.0D+307
-    !METHOD
-    integer, parameter :: ISOTROPIC = 1, &
-                          SHINOZUKA = 2, &
-                          RANDOMIZATION = 3, &
-                          FFT = 4
+    !METHOD (gen_meth)
+    integer, parameter :: FFT = 1, &
+                          FFT_MPI = 2
     !Correlation Model
     integer, parameter :: cm_GAUSSIAN = 1, &
                           cm_VON_KARMAN = 2

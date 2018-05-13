@@ -215,88 +215,158 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
 
 end subroutine gen_Std_Gauss_FFT
 
-!subroutine gen_Std_Gauss_FFT_OPT(data_real_3D, Np, &
-!                                 xRange, corrL, corrMod, &
-!                                 seed)
-!    implicit none
-!    !INPUT
-!    integer, dimension(3), intent(in) :: Np
-!    double precision, dimension(3), intent(in) :: xRange
-!    integer, intent(in) :: corrMod
-!    double precision, dimension(3), intent(in) :: corrL
-!    integer, intent(in) ::  seed
-!    !INPUT OUTPUT
-!    double precision, dimension(:,:,:), intent(inout) :: data_real_3D
-!    !LOCAL
-!    integer(C_INTPTR_T) :: L, M, N
-!    !real(C_DOUBLE), pointer :: data_real_3D(:,:,:)
-!    type(C_PTR) :: cdata, plan
-!    !integer(C_INTPTR_T) :: alloc_local
-!    !integer :: sliceSize
-!    !integer :: kNLocal
-!
-!    double precision, dimension(:), allocatable :: gammaK, phiK
-!    integer(kind=8) :: i_long, kNCumulated_Init, kNCumulated_End
-!    double precision :: trashNumber
-!    integer, dimension(RDF%nDim) :: xNStepGlob
-!    double precision :: ampMult
-!
-!
-!    L = Np(1)
-!    M = Np(2)
-!    N = Np(3)
-!
-!    call set_kPoints(RDF, MSH%xStep)
-!    call set_SkVec(RDF)
-!
-!
-!    kNLocal = size(RDF%kPoints,2)
-!
-!    allocate(gammaK(kNLocal))
-!    allocate(phik(kNLocal))
-!
-!    gammaK       = gammaK -0.5
-!    RDF%SkVec(:) =  gammak*sqrt(RDF%SkVec)*cos(2.0D0*PI*phik);
-!    !RDF%SkVec(:) =  sqrt(RDF%SkVec)*cos(2.0D0*PI*phik);
-!
-!    !TODO Build data_real_3D
-!    do ii = 1, Np(1)
-!        do jj = 1, Np(2)
-!            do kk = 1, Np(3)
-!                data_real_3D(ii,jj,kk) = !TODO
-!            end do
-!        end do
-!    end do
-!
-!    if(allocated(gammaK)) deallocate(gammaK)
-!    if(allocated(phik))   deallocate(phik)
-!
-!    !cdata = fftw_alloc_real(alloc_local)
-!    !call c_f_pointer(cdata, data_real_2D, [L,local_M])
-!
-!    ampMult = 2.0d0*sqrt(product(MSH%xStep)/((2.0d0)**(dble(RDF%nDim))))
-!
-!    plan = fftw_plan_r2r_3d(N, M, L, data_real_3D, data_real_3D, &
-!                             FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE)
-!    !plan = fftw_mpi_plan_r2r(RDF%nDim, [N, M, L], data_real_3D, data_real_3D, &
-!    !                         RDF%comm, [FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01], FFTW_ESTIMATE)
-!    !data_real_3D(:,:,:) = reshape(RDF%SkVec, [L, M, local_LastDim])
-!    write(*,*) "Calculating FFT In rang ", RDF%rang
-!    !write(*,*) "plan = ", plan
-!    write(*,*) "shape(data_real_3D) = ", shape(data_real_3D)
-!    !call fftw_mpi_execute_r2r(plan, data_real_3D, data_real_3D)
-!    call fftw_execute_r2r(plan, data_real_3D, data_real_3D)
-!    write(*,*) "AFTER Calculating FFT In rang ", RDF%rang
-!    data_real_3D = data_real_3D*(2.0D0)*sqrt(product(MSH%xStep))
-!    !RDF%randField(:,1) = reshape(data_real_3D, [L*M*local_LastDim])
-!
-!    call fftw_destroy_plan(plan)
-!    call fftw_free(cdata)
-!
-!
-!    if(allocated(gammaK)) deallocate(gammaK)
-!    if(allocated(phik)) deallocate(phik)
-!
-!end subroutine gen_Std_Gauss_FFT_OPT
+!-------------------------------------------------------------
+!-------------------------------------------------------------
+!-------------------------------------------------------------
+!-------------------------------------------------------------
+subroutine gen_Std_Gauss_FFT_MPI(data_real_3D_out, &
+                                 xRange, corrL, corrMod, &
+                                 seed, rank, L, Np, comm)
+    implicit none
+    !INPUT
+    integer, dimension(3), intent(in) :: L
+    integer, intent(in) :: rank, comm
+    double precision, dimension(3), intent(in) :: xRange
+    integer, intent(in) :: corrMod
+    double precision, dimension(3), intent(in) :: corrL
+    integer, intent(in) ::  seed
+    integer, dimension(3), intent(in) :: Np
+    !INPUT OUTPUT
+    double precision, dimension(:,:,:), allocatable, intent(out) :: data_real_3D_out
+    !LOCAL
+    real(C_DOUBLE), pointer :: data_real_3D(:,:,:)
+    integer(C_INTPTR_T) :: Np1, Np2, Np3, Np3_offset
+    integer(C_INTPTR_T) :: L1,  L2,  L3
+    !real(C_DOUBLE), pointer :: data_real_3D(:,:,:)
+    type(C_PTR) :: cdata, plan
+    integer(C_INTPTR_T) :: alloc_local
+    !integer :: sliceSize
+    !integer :: kNLocal
+
+    !integer(kind=8) :: i_long, kNCumulated_Init, kNCumulated_End
+    integer :: kInit, kEnd
+    double precision, dimension(:,:,:,:), allocatable :: kPoints_3D
+    double precision, dimension(:,:,:), allocatable :: phiK, gammaK, Sk_mtx
+    double precision, dimension(:,:), allocatable :: trash_rand
+    double precision :: ampMult
+    double precision, dimension(3) :: delta_k, k_max
+    integer :: ii, jj, kk
+    integer, dimension(:), allocatable :: seedVec
+    integer :: seedSz, clock
+    integer ::nRandVar
+
+    call fftw_mpi_init()
+
+    L1 = L(1); L2 = L(2); L3 = L(3)
+    alloc_local = fftw_mpi_local_size_3d(L3, L2, L1, comm, &
+                                         Np3, Np3_offset) !FOR MPI
+    Np1 = L1; Np2 = L2;
+
+    if(any(Np /= [Np1, Np2, Np3])) stop "Error in Np definition inside FFT_MPI"
+
+    cdata = fftw_alloc_real(alloc_local)
+    call c_f_pointer(cdata, data_real_3D, [Np1, Np2, Np3])
+
+    allocate(kPoints_3D(3,Np(1),Np(2),Np(3)))
+
+    !Build k matrix MPI
+    print *, "Build k matrix, proc ", rank
+    
+    kInit = Np3_offset + 1
+    kEnd = kInit + Np3 -1
+    
+    print *, "Proc ", rank, ", kInit = ", kInit
+    print *, "Proc ", rank, ", kEnd  = ", kEnd
+    print *, "Proc ", rank, ", size(kPoints_3D)  = ", size(kPoints_3D)
+
+    delta_k(:) = 2.0d0*PI/(1.1d0*xRange)
+    k_max(:) = ((Np-1)*delta_k)    
+    do ii = 1, Np(1)
+        do jj = 1, Np(2)
+            do kk = kInit, kEnd
+                kPoints_3D(:,ii,jj,kk-kInit+1) = dble([ii,jj,kk]-1)*delta_k(:)
+            end do
+        end do
+    end do
+
+    !Build Sk matrix MPI
+    print *, "Build Sk matrix, proc ", rank
+    allocate(Sk_mtx(Np(1),Np(2),Np(3)))
+    select case(corrMod)
+
+    case(cm_GAUSSIAN)
+        Sk_mtx(:,:,:) = 1.0d0
+        
+        do ii = 1, 3
+            Sk_mtx(:,:,:) = Sk_mtx(:,:,:) * corrL(ii) * &
+                           exp(-((kPoints_3D(ii,:,:,:)**2.0D0) * corrL(ii)**2.0d0)/(4.0d0*pi))
+        end do
+
+    end select
+    
+    !allocate(data_real_3D_out(Np1,Np2,Np3)) !FOR DEBUG
+    !data_real_3D_out(:,:,:) = Sk_mtx !FOR DEBUG
+    !data_real_3D_out(:,:,:) = rank !FOR DEBUG
+    !data_real_3D_out(:,:,:) = kPoints_3D(3,:,:,:) !FOR DEBUG
+    deallocate(kPoints_3D)
+
+
+
+    !Add random variables    
+    print *, "Build random variables, proc ", rank
+   ! call r8vec_uniform_01 ( size(phiK), seed+1000, phiK )
+   ! call r8vec_normal_01 ( size(gammaK), seed+2000, gammaK )!ERROR TODO find another normal randon number generator
+    
+    call random_seed(size = seedSz)
+    allocate(seedVec(seedSz))
+    if(seed >= 0) then
+        seedVec = seed + rank
+        !Putting away the random numbers from others k (that are in others procs)
+        allocate(trash_rand(Np(1),Np(2)))
+        do jj = 1, nRandVar
+            do ii = 1, Np3_offset
+                call random_number(trash_rand) 
+            end do
+        end do
+        deallocate(trash_rand)
+    else
+        call system_clock(COUNT=clock)
+        seedVec = 100*rank + clock + 37*(/ (ii - 1, ii = 1, seedSz) /) 
+    end if 
+    call random_seed(put=seedVec)
+
+    allocate(gammaK(Np(1),Np(2),Np(3)))
+    allocate(phiK(Np(1),Np(2),Np(3)))
+    call random_number(gammaK) 
+    call random_number(phiK) 
+    gammaK  = gammaK -0.5
+
+    print *, "ADD random variables, proc ", rank
+    Sk_mtx  = gammak*sqrt(Sk_mtx)*cos(2.0D0*PI*phik);
+
+    !ampMult = 2.0d0*sqrt(product(MSH%xStep)/((2.0d0)**(dble(RDF%nDim))))
+
+    plan = fftw_mpi_plan_r2r(3, [L3, L2, L1], data_real_3D, data_real_3D, &
+                                 comm, [FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01], FFTW_ESTIMATE)
+    !plan = fftw_mpi_plan_r2r(3, [Np3, Np2, Np1], data_real_3D, data_real_3D, &
+    !                             comm, [FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01], FFTW_ESTIMATE)
+    data_real_3D(:,:,:) = Sk_mtx
+    call fftw_mpi_execute_r2r(plan, data_real_3D, data_real_3D)
+
+    write(*,*) "Calculating FFT In rank ", rank
+    write(*,*) "shape(data_real_3D) = ", shape(data_real_3D)
+
+
+    !data_real_3D = data_real_3D*(2.0D0)*sqrt(product(MSH%xStep))
+    allocate(data_real_3D_out(Np1,Np2,Np3))
+    data_real_3D_out(:,:,:) = data_real_3D
+    call fftw_destroy_plan(plan)
+    call fftw_free(cdata)
+
+    if(allocated(gammaK)) deallocate(gammaK)
+    if(allocated(phik)) deallocate(phik)
+    if(allocated(Sk_mtx)) deallocate(Sk_mtx)
+
+end subroutine gen_Std_Gauss_FFT_MPI
 
 end module fftw_ScaRL
