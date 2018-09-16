@@ -164,18 +164,29 @@ subroutine gen_std_gauss_FFT(data_real_3D, Np, &
     
     
 
-    !Build Sk matrix
+    !Build Sk matrix (PSFD)
     print *, "Build Sk matrix, proc ", rank
     allocate(Sk_mtx(Np(1),Np(2),Np(3)))
     select case(corrMod)
 
     case(cm_GAUSSIAN)
         Sk_mtx(:,:,:) = 1.0d0
-        
         do ii = 1, 3
             Sk_mtx(:,:,:) = Sk_mtx(:,:,:) * corrL(ii) * &
                            exp(-((kPoints_3D(ii,:,:,:)**2.0D0) * corrL(ii)**2.0d0)/(4.0d0*pi))
         end do
+      !  Sk_mtx(:,:,:) = 1.0d0/(8d0*PI^3)*&
+      !                  exp(-(sum(kPoints_3D(:,:,:,:)**2d0,1)/sum(corrL(:)**2d0))/(4.0d0*pi))
+        
+
+  !  case(cm_EXPONENTIAL)
+  !      Sk_mtx(:,:,:) = 1.0d0/(8d0*PI^2)*&
+  !                      
+  !      
+  !      do ii = 1, 3
+  !          Sk_mtx(:,:,:) = Sk_mtx(:,:,:) * corrL(ii) * &
+  !                         exp(-((kPoints_3D(ii,:,:,:)**2.0D0) * corrL(ii)**2.0d0)/(4.0d0*pi))
+  !      end do
 
     end select
     deallocate(kPoints_3D)

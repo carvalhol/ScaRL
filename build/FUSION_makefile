@@ -1,20 +1,26 @@
 #### PATH TO HDF5 AND MPI LIBRARY AND INCLUDES - to be modified by user (to be completed)
 
-#LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
-#INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI/include
-LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
-INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/include
+#LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+#INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/include
+#LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
+#INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
 
-#LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
-#INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2016.1.150/linux/mpi/intel64/include
-LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
-INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/include
-LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
-INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
+#LOCAL
+LIBHDF5     = -L/home/carvalho/LOCAL_LIB/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+INCLUDEHDF5 = -I/home/carvalho/LOCAL_LIB/include
+LIBFFTW     = -L/home/carvalho/LOCAL_LIB/lib -lfftw3_mpi -lfftw3
+INCLUDEFFTW = -I/home/carvalho/LOCAL_LIB/include
+
+LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2018.2.199/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
+INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2018.2.199/linux/mpi/intel64/include
+
+#LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
+#INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/include
 
 EXEC  = ScaRL.exe
 FC   = mpiifort
-FFLAGS = -g -O1 -cpp -DMAKELOG
+#FFLAGS = -g -O1 -cpp -DMAKELOG
+FFLAGS = -xCORE-AVX2 -O3 -no-prec-div
 
 #### FROM THIS POINT ON THE USER SHOULD NOT MODIFY
 RM := rm -rf
@@ -33,13 +39,12 @@ ScaRL_OBJ += ./main_ScaRL.o \
                constants_ScaRL.o \
                normal_ScaRL.o \
                read_input.o \
-	       spectra_ScaRL.o \
-	       bessel.o
+	           spectra_ScaRL.o \
+	           bessel.o
 LIBS = $(LIBHDF5) $(LIBMPI) $(LIBFFTW)
 INCLUDE = $(INCLUDEHDF5) $(INCLUDEMPI) $(INCLUDEFFTW)
 
 #Dependencies
-#main_ScaRL.o   : constants_ScaRL.o
 main_ScaRL.o    : write_output.o \
                   str_functions.o \
                   fftw_ScaRL.o \
@@ -51,7 +56,7 @@ write_output.o  : str_functions.o \
 read_input.o    : str_functions.o
 fftw_ScaRL.o    : constants_ScaRL.o \
                   normal_ScaRL.o \
-		  spectra_ScaRL.o
+         		  spectra_ScaRL.o
 spectra_ScaRL.o : constants_ScaRL.o \
                   normal_ScaRL.o
 

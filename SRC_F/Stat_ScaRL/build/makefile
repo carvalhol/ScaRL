@@ -8,19 +8,28 @@
 
 #### PATH TO HDF5 AND MPI LIBRARY AND INCLUDES - to be modified by user (to be completed)
 
-LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
-INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/include
+#LIBHDF5     = -L/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+#INCLUDEHDF5 = -I/gpfs/opt/libraries/phdf5/1.8.17-IntelMPI-bis/include
+#
+#
+#LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
+#INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/include
+#
+#LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
+#INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
 
+LIBHDF5     = -L/home/carvalho/LOCAL_LIB/lib/ -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+INCLUDEHDF5 = -I/home/carvalho/LOCAL_LIB/include
+LIBFFTW     = -L/home/carvalho/LOCAL_LIB/lib -lfftw3_mpi -lfftw3
+INCLUDEFFTW = -I/home/carvalho/LOCAL_LIB/include
 
-LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
-INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/include
-
-LIBFFTW     = -L/gpfs/opt/libraries/fftw/3.3.4/lib -lfftw3_mpi -lfftw3
-INCLUDEFFTW = -I/gpfs/opt/libraries/fftw/3.3.4/include
+LIBMPI      = -L/gpfs/opt/compilers/intel/compilers_and_libraries_2018.2.199/linux/mpi/intel64/lib -lmpi -lmpi_dbg -lmpi_mt -lmpigf -lmpi_ilp64
+INCLUDEMPI  = -I/gpfs/opt/compilers/intel/compilers_and_libraries_2018.2.199/linux/mpi/intel64/include
 
 EXEC2 = statistics.exe
 FC   = mpiifort
-FFLAGS = -g -cpp
+#FFLAGS = -g -cpp
+FFLAGS = -xCORE-AVX2 -O3 -no-prec-div
 
 #### FROM THIS POINT ON THE USER SHOULD NOT MODIFY
 RM := rm -rf
