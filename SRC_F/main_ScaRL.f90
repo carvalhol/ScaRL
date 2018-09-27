@@ -54,6 +54,8 @@ program main_ScaRL
     time_init = MPI_Wtime() 
     time_tic = time_init
 
+    !print*, "TESTE FFTw";
+    !call test_FFTw()
     call read_config_ScaRL("./config_ScaRL.txt", gen_meth, &
                           c_info_file, d_sample, one_file, one_hdf_ds, &
                           input_file, rank, comm_group) 
@@ -406,7 +408,16 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
     
     output_name = output_name_in
     
-    filePath = str_cat(res_folder,"/",output_name,".h5")
+    if(one_file) then 
+        HDF5_name = str_cat(output_name,".h5")
+        XMF_name  = str_cat(output_name,".xmf")
+    else
+        if(rank == 0) print*, "HDF5 - One File Per Proc and One Dataset"
+        HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
+        XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
+    end if
+    
+    filePath = str_cat(res_folder,"/",HDF5_name)
     if(rank == 0) print*, "filePath = ", trim(filePath)
     inquire(file=filePath, exist=fileExists)
     if(rank == 0) print*, "     exists? ",fileExists
@@ -421,9 +432,26 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
                         MPI_CHARACTER, 0, comm_group, code)
 
         output_name = str_cat(output_name_in,"-",date_str)
-        if(rank == 0) print*, "NEW output_name = ", trim(output_name)
+        
+        if(one_file) then 
+            HDF5_name = str_cat(output_name,".h5")
+            XMF_name  = str_cat(output_name,".xmf")
+        else
+            if(rank == 0) print*, "HDF5 - One File Per Proc and One Dataset"
+            HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
+            XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
+        end if
+        
+        if(rank == 0) print*, "NEW output_name    = ", trim(output_name)
+    
+    else
+        if(rank == 0) print*, "output_name    = ", trim(output_name)
+    
     end if
      
+    if(rank == 0) print*, "HDF5 output proc 0 = ", trim(HDF5_name)
+    if(rank == 0) print*, "XMF  output proc 0 = ", trim(XMF_name)
+
     pos_0 = (Np-Np_ovlp)*topo_pos + 1
     pos_N = pos_0 + Np-1            
     coord_0 = dble(pos_0-1)*xStep + xMinGlob
@@ -534,9 +562,9 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
     call MPI_Barrier(comm_group,code)
     time_tic = MPI_Wtime()
   
-   if(rank == 0) print*, "normalize_field " 
-   call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
-                        rank, comm_group, k_mtx)
+    !if(rank == 0) print*, "normalize_field " 
+    !call normalize_field(topo_pos, topo_shape, Np, Np_ovlp, &
+    !                    rank, comm_group, k_mtx)
 
     time_toc = MPI_Wtime()
     time_count = time_count + 1
@@ -557,10 +585,12 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
    if(rank == 0) print*, "maxval(k_mtx) AFTER = ", maxval(k_mtx) 
    if(rank == 0) print*, "minval(k_mtx) AFTER = ", minval(k_mtx)
 
-   if(rank == 0) print*, "write HDF5 " 
+   if(rank == 0) print*, "write HDF5 "
+
+
    if(one_file) then 
-       HDF5_name = str_cat(output_name,".h5")
-       XMF_name  = str_cat(output_name,".xmf")
+       !HDF5_name = str_cat(output_name,".h5")
+       !XMF_name  = str_cat(output_name,".xmf")
        if(one_hdf_ds) then
            if(rank == 0) print*, "HDF5 - One File and One Dataset"
            !print*, "1 L= ", L
@@ -597,8 +627,8 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
        end if
    else
        if(rank == 0) print*, "HDF5 - One File Per Proc and One Dataset"
-       HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
-       XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
+       !HDF5_name = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".h5")
+       !XMF_name  = str_cat(output_name,"_proc_",trim(num2str(rank,5)),".xmf")
        call write_hdf5_single_proc_3D(coord_0, &
                                   coord_N, &
                                   xMinGlob, xMaxGlob, &
@@ -617,7 +647,8 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
    end if
 
    if(rank==0 .and. (.not.(one_file .and. one_hdf_ds))) then
-       if(rank == 0) print*, "WRITING GLOBAL XMF" 
+       if(rank == 0) print*, "WRITING GLOBAL XMF"
+       print*, "HERE"
        do temp_rank = 0, nb_procs-1
            call get_topo_pos(temp_rank,  &
                              topo_shape, &
@@ -667,18 +698,13 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
            if(rank == 0) print*, "     exists? ",fileExists
            
            if(fileExists) then
-               if(rank == 0) then
-                   call date_and_time(strings(1), strings(2), strings(3), date_time)
-                   date_str = strings(1)(3:8)//"_"//strings(2)(1:6)
-               end if
-               
-               call MPI_BCAST (date_str, len(date_str), &
-                               MPI_CHARACTER, 0, comm_group, code)
-
+               call date_and_time(strings(1), strings(2), strings(3), date_time)
+               date_str = strings(1)(3:8)//"_"//strings(2)(1:6)
                info_file_name = str_cat("INFO-",output_name,"-",date_str,".h5")
-               if(rank == 0) print*, "NEW info_file_name = ", trim(info_file_name)
            end if
 
+           print*, "info_file_name = ", trim(info_file_name)
+           
            call write_info_file(info_file_name, res_folder, rank)
            print*, "Writing attributes"
            call write_HDF5_attributes(&
@@ -690,6 +716,9 @@ subroutine create_fields(Np, Np_ovlp, L, pointsPerCorrL,  rank, &
                         L, Np, Np_ovlp, .false.)
        end if
        
+       call MPI_BCAST (info_file_name, len(info_file_name,), &
+                       MPI_CHARACTER, 0, comm_group, code)
+
        if(rank==0) print*, "Writing times"
        call write_time_on_hdf5(time_label(1:time_count), &
                                time_trace(1:time_count), &
